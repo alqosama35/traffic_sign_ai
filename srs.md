@@ -143,15 +143,17 @@ The platform bridges four academic courses into one end-to-end system:
 
 **FR-CV-03:** The system shall extract SIFT (Scale-Invariant Feature Transform) features from the preprocessed images.
 
-**FR-CV-04:** The system shall perform SIFT feature matching across image pairs to verify descriptor quality.
+**FR-CV-04:** The system shall perform SIFT feature matching across image pairs, draw match visualizations, and report a quantitative matching accuracy metric (correct-match ratio or RANSAC inlier ratio) for a representative sample of image pairs.
 
 **FR-CV-05:** The system shall apply image segmentation using K-means clustering or the Watershed algorithm to isolate sign regions.
 
 **FR-CV-06:** The system shall train a Naive Bayes classifier on the extracted SIFT feature vectors.
 
-**FR-CV-07:** The CV baseline shall be evaluated on the GTSRB test set and report overall accuracy, per-class precision, recall, and F1.
+**FR-CV-07:** The CV baseline shall be evaluated on the GTSRB test set and report: overall accuracy, per-class precision, recall, F1, IoU (Intersection over Union) for the segmentation step, and descriptor matching accuracy for the SIFT matching step.
 
 **FR-CV-08:** The CV baseline accuracy shall be reported as the lower-bound comparison point in the three-way model comparison table.
+
+**FR-CV-09:** The system shall implement a Gaussian or Laplacian image pyramid on sample GTSRB images, demonstrate scale-space analysis at a minimum of 3 pyramid levels, and produce a scale-space visualization showing sign detection at multiple scales. This visualization shall be included in the CV evaluation report.
 
 ---
 
@@ -223,7 +225,7 @@ The platform bridges four academic courses into one end-to-end system:
 
 ### 3.5 Inference API
 
-**FR-API-01:** The system shall expose a `POST /predict` endpoint that accepts a multipart image upload and returns a JSON response containing: predicted class label, confidence score (0–1), and top-3 alternative predictions with their confidence scores.
+**FR-API-01:** The system shall expose a `POST /predict` endpoint that accepts a multipart image upload and returns a JSON response containing: predicted class label, sign category (e.g., "prohibition", "warning", "mandatory", "informational"), confidence score (0–1), and top-3 alternative predictions with their confidence scores. The category shall be derived from a static lookup table mapping each of the 43 GTSRB class IDs to its sign category.
 
 **FR-API-02:** The system shall expose a `GET /health` endpoint returning HTTP 200 and `{"status": "ok"}` when the service is running.
 
@@ -233,7 +235,7 @@ The platform bridges four academic courses into one end-to-end system:
 
 **FR-API-05:** The API shall serve interactive documentation at `GET /docs` (Swagger UI).
 
-**FR-API-06:** A `test_api.py` script shall send at least 10 representative test images to `/predict` and assert that: HTTP status is 200, `class` field is a string, `confidence` is between 0 and 1, `top_3` contains exactly 3 entries.
+**FR-API-06:** A `test_api.py` script shall send at least 10 representative test images to `/predict` and assert that: HTTP status is 200, `class` field is a string, `category` field is a non-empty string, `confidence` is between 0 and 1, `top_3` contains exactly 3 entries.
 
 **FR-API-07:** API response time shall be <500ms per request under normal load.
 
@@ -350,6 +352,7 @@ Request
 Response 200
 {
   "class": "Speed limit (30km/h)",
+  "category": "prohibition",
   "confidence": 0.97,
   "top_3": [
     {"class": "Speed limit (30km/h)", "confidence": 0.97},
@@ -507,7 +510,9 @@ s3://<bucket>/
 |---|---|
 | CV baseline accuracy | Reported (expected 60–70%) |
 | SIFT + Naive Bayes pipeline | End-to-end functional on GTSRB test set |
-| Full evaluation report | Precision, recall, F1 per class |
+| Full evaluation report | Precision, recall, F1 per class; IoU for segmentation; matching accuracy for SIFT |
+| Gaussian/Laplacian Pyramid | Implemented at ≥3 scales; scale-space visualization produced |
+| Harris threshold analysis | Threshold tuning effect documented with visual comparison |
 
 ### 9.4 Cloud Acceptance Criteria
 
@@ -535,7 +540,7 @@ s3://<bucket>/
 
 ---
 
-*This SRS supersedes the informal proposal (cloud_proposal.md) and incorporates fixes for both identified requirement gaps: the CI/CD pipeline (Gap 1) is now a hard requirement under FR-CI-03, and the dual-architecture comparison (Gap 2) is now a hard requirement under FR-AML-02.*
+*This SRS supersedes the informal proposal (cloud_proposal.md) and incorporates fixes for all identified requirement gaps: the CI/CD pipeline (Gap 1) is a hard requirement under FR-CI-03; the dual-architecture comparison (Gap 2) is a hard requirement under FR-AML-02; the Gaussian/Laplacian image pyramid and scale-space analysis (Gap 3) is a hard requirement under FR-CV-09; IoU and matching accuracy metrics (Gap 4) are required under FR-CV-07; and the sign category field in the API response (Gap 5) is a hard requirement under FR-API-01.*
 
 ---
 
@@ -546,7 +551,7 @@ s3://<bucket>/
 | Member | Role | SRS Requirements Owned |
 |---|---|---|
 | Member 1 | Data Engineer | FR-D-01 → FR-D-07 |
-| Member 2 | CV Engineer | FR-CV-01 → FR-CV-08 |
+| Member 2 | CV Engineer | FR-CV-01 → FR-CV-09 |
 | Member 3 | ML Engineer | FR-AML-01 → FR-AML-13 |
 | Member 4 | EA Engineer | FR-EA-01 → FR-EA-16 |
 | Member 5 | API Developer | FR-API-01 → FR-API-07 |
@@ -576,17 +581,18 @@ s3://<bucket>/
 ---
 
 #### Member 2 — CV Engineer
-**Owns:** FR-CV-01 → FR-CV-08
+**Owns:** FR-CV-01 → FR-CV-09
 
 | Deliverable | Linked Requirement |
 |---|---|
-| Gaussian / Median filter preprocessing pipeline | FR-CV-01 |
-| Harris Corner Detector implementation and keypoint visualization | FR-CV-02 |
+| Gaussian / Median filter preprocessing pipeline with visual and numerical comparison | FR-CV-01 |
+| Harris Corner Detector implementation, keypoint visualization, and threshold tuning analysis | FR-CV-02 |
+| Gaussian or Laplacian image pyramid (≥3 scales) with scale-space visualization | FR-CV-09 |
 | SIFT feature extraction | FR-CV-03 |
-| SIFT feature matching across image pairs | FR-CV-04 |
+| SIFT feature matching across image pairs with match visualization and matching accuracy metric | FR-CV-04 |
 | Image segmentation using K-means or Watershed | FR-CV-05 |
 | Naive Bayes classifier trained on SIFT feature vectors | FR-CV-06 |
-| CV baseline evaluation report: accuracy, precision, recall, F1 per class | FR-CV-07 |
+| CV baseline evaluation report: accuracy, per-class precision/recall/F1, IoU (segmentation), matching accuracy (SIFT) | FR-CV-07 |
 | Baseline accuracy figure for the three-way comparison table | FR-CV-08 |
 
 **Depends on:** M1 (dataset splits).
@@ -649,12 +655,12 @@ s3://<bucket>/
 
 | Deliverable | Linked Requirement |
 |---|---|
-| `POST /predict` endpoint: accepts image, returns class + confidence + top-3 | FR-API-01 |
+| `POST /predict` endpoint: accepts image, returns class + category + confidence + top-3 | FR-API-01 |
 | `GET /health` endpoint returning `{"status": "ok"}` | FR-API-02 |
 | Safety disclaimer included in every `/predict` response | FR-API-03 |
 | In-memory image preprocessing (resize, normalize); no image persistence | FR-API-04 |
 | Swagger UI at `GET /docs` | FR-API-05 |
-| `test_api.py`: 10+ test images, asserts status 200, valid class, confidence ∈ [0,1], top_3 length = 3 | FR-API-06 |
+| `test_api.py`: 10+ test images, asserts status 200, valid class, non-empty category, confidence ∈ [0,1], top_3 length = 3 | FR-API-06 |
 | Response time < 500ms verified locally before handoff | FR-API-07 |
 
 **Depends on:** M3 (`.pth` model file).
