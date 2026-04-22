@@ -1,6 +1,6 @@
 # Software Requirements Specification (SRS)
 ## Traffic Sign Intelligence Platform
-### Version 1.0 — Spring 2026
+### Version 1.1 — Spring 2026
 
 ---
 
@@ -9,8 +9,8 @@
 | **Project Title** | Traffic Sign Intelligence Platform |
 | **Course Mapping** | Cloud Computing · Advanced ML · Evolutionary Algorithms · Computer Vision |
 | **Team Type** | AI-Only |
-| **Document Version** | 1.0 |
-| **Date** | 2026-04-18 |
+| **Document Version** | 1.1 |
+| **Date** | 2026-04-21 |
 
 ---
 
@@ -24,7 +24,7 @@
    - 3.3 Transfer Learning Trainer (AML)
    - 3.4 GA Feature Selection Engine (EA)
    - 3.5 Inference API
-   - 3.6 Containerization and CI/CD *(Gap 1 fix)*
+   - 3.6 Containerization and CI/CD
    - 3.7 Cloud Deployment
    - 3.8 Results Dashboard
 4. [Non-Functional Requirements](#4-non-functional-requirements)
@@ -133,6 +133,8 @@ The platform bridges four academic courses into one end-to-end system:
 
 **FR-D-07:** The processed dataset shall be stored in S3 so it is downloaded once and never re-fetched during training or inference.
 
+**FR-D-08:** The system shall train two comparable model runs — one with the augmentation pipeline active and one without — and report the accuracy delta between the two in the training report.
+
 ---
 
 ### 3.2 Computer Vision Baseline *(CV course)*
@@ -151,7 +153,7 @@ The platform bridges four academic courses into one end-to-end system:
 
 **FR-CV-07:** The CV baseline shall be evaluated on the GTSRB test set and report: overall accuracy, per-class precision, recall, F1, IoU (Intersection over Union) for the segmentation step, and descriptor matching accuracy for the SIFT matching step.
 
-**FR-CV-08:** The CV baseline accuracy shall be reported as the lower-bound comparison point in the three-way model comparison table.
+**FR-CV-08:** The CV baseline accuracy shall be reported as the lower-bound comparison point in the four-way model comparison table.
 
 **FR-CV-09:** The system shall implement a Gaussian or Laplacian image pyramid on sample GTSRB images, demonstrate scale-space analysis at a minimum of 3 pyramid levels, and produce a scale-space visualization showing sign detection at multiple scales. This visualization shall be included in the CV evaluation report.
 
@@ -161,7 +163,7 @@ The platform bridges four academic courses into one end-to-end system:
 
 **FR-AML-01:** The system shall fine-tune MobileNetV2 pre-trained on ImageNet on the GTSRB training set.
 
-**FR-AML-02 *(Gap 2 fix):*** The system shall **also** fine-tune EfficientNet-B0 pre-trained on ImageNet on the same GTSRB training set. Both runs shall complete and produce a saved `.pth` checkpoint. The MobileNetV2 model is the production model; the EfficientNet-B0 result is required for the architecture comparison table.
+**FR-AML-02:** The system shall also fine-tune EfficientNet-B0 pre-trained on ImageNet on the same GTSRB training set. Both runs shall complete and produce a saved `.pth` checkpoint. The MobileNetV2 model is the production model; the EfficientNet-B0 result is required for the architecture comparison table.
 
 **FR-AML-03:** The training strategy shall freeze the backbone for the first 5 epochs, then unfreeze the last 2 blocks for fine-tuning.
 
@@ -207,7 +209,11 @@ The platform bridges four academic courses into one end-to-end system:
 
 **FR-EA-09:** The system shall implement Bit-Flip Mutation with probability 0.01 per bit.
 
+**FR-EA-09b *(Recommended):*** The system should implement a second mutation operator (e.g., Swap Mutation or Random Resetting) and run at least 2 additional experiment configurations comparing it against Bit-Flip Mutation. Results shall include the effect on convergence speed and final best fitness.
+
 **FR-EA-10:** Termination shall occur after 100 generations or after 20 consecutive generations with no improvement in best fitness, whichever comes first.
+
+**FR-EA-10b *(Recommended):*** The system should implement and compare at least 2 survivor selection strategies (e.g., generational replacement vs elitism or steady-state). Each strategy shall be run independently and its effect on convergence speed and solution quality shall be reported.
 
 **FR-EA-11:** The system shall implement Fitness Sharing within niches to maintain population diversity and prevent premature convergence.
 
@@ -241,13 +247,13 @@ The platform bridges four academic courses into one end-to-end system:
 
 ---
 
-### 3.6 Containerization and CI/CD *(Gap 1 fix)*
+### 3.6 Containerization and CI/CD
 
 **FR-CI-01:** The inference service shall be packaged in a `Dockerfile` using a Python 3.10 slim base image.
 
 **FR-CI-02:** A `docker-compose.yml` shall define the API service, expose port 8000, and mount the model path as an environment variable.
 
-**FR-CI-03 *(Gap 1 fix — CI/CD pipeline):*** A GitHub Actions workflow file (`.github/workflows/deploy.yml`) shall automate the following pipeline on every push to the `main` branch:
+**FR-CI-03:** A GitHub Actions workflow file (`.github/workflows/deploy.yml`) shall automate the following pipeline on every push to the `main` branch:
 1. **Build:** `docker build` the inference image
 2. **Test:** run `test_api.py` against the locally started container
 3. **Push:** push the tagged image to AWS ECR (using `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` GitHub secrets)
@@ -285,7 +291,7 @@ The platform bridges four academic courses into one end-to-end system:
 
 **FR-DASH-03:** The dashboard shall display the 43×43 confusion matrix heatmap for the MobileNetV2 model.
 
-**FR-DASH-04:** The dashboard shall display the three-way model comparison table: CV Baseline vs MobileNetV2 vs EfficientNet-B0 vs GA-Optimized model, reporting test accuracy and (for DL models) inference latency.
+**FR-DASH-04:** The dashboard shall display the four-way model comparison table: CV Baseline vs MobileNetV2 vs EfficientNet-B0 vs GA-Optimized model, reporting test accuracy and (for DL models) inference latency.
 
 **FR-DASH-05:** The dashboard shall include a Live Prediction tab with an image upload form that calls `/predict` and displays the result inline.
 
@@ -493,16 +499,19 @@ s3://<bucket>/
 | Top-5 accuracy | ≥ 98% |
 | Confusion matrix | Produced and visualized (43×43) |
 | Classification report | All 43 classes, precision/recall/F1 |
+| Augmentation comparison | Accuracy delta (augmented vs no-augmentation) reported in training report |
 
 ### 9.2 EA Acceptance Criteria
 
 | Metric | Threshold |
 |---|---|
-| Configurations run | 4 (2 selection × 2 crossover) |
+| Configurations run | 4 mandatory (2 selection × 2 crossover) |
 | Feature reduction | ≥ 30% reduction from full feature set |
 | Accuracy degradation | < 3 percentage points vs full-feature model |
 | Convergence curve | Visible convergence (fitness improves over generations) |
 | Experiment logs in S3 | All 4 JSON logs present and valid |
+| Second mutation operator *(recommended)* | Implemented; ≥2 additional experiment configs run and compared (FR-EA-09b) |
+| Survivor selection strategy *(recommended)* | 2 strategies implemented and convergence effect reported (FR-EA-10b) |
 
 ### 9.3 CV Acceptance Criteria
 
@@ -540,7 +549,7 @@ s3://<bucket>/
 
 ---
 
-*This SRS supersedes the informal proposal (cloud_proposal.md) and incorporates fixes for all identified requirement gaps: the CI/CD pipeline (Gap 1) is a hard requirement under FR-CI-03; the dual-architecture comparison (Gap 2) is a hard requirement under FR-AML-02; the Gaussian/Laplacian image pyramid and scale-space analysis (Gap 3) is a hard requirement under FR-CV-09; IoU and matching accuracy metrics (Gap 4) are required under FR-CV-07; and the sign category field in the API response (Gap 5) is a hard requirement under FR-API-01.*
+*This document supersedes the informal proposal (cloud_proposal.md) and constitutes the binding technical reference for the Traffic Sign Intelligence Platform.*
 
 ---
 
@@ -550,7 +559,7 @@ s3://<bucket>/
 
 | Member | Role | SRS Requirements Owned |
 |---|---|---|
-| Member 1 | Data Engineer | FR-D-01 → FR-D-07 |
+| Member 1 | Data Engineer | FR-D-01 → FR-D-08 |
 | Member 2 | CV Engineer | FR-CV-01 → FR-CV-09 |
 | Member 3 | ML Engineer | FR-AML-01 → FR-AML-13 |
 | Member 4 | EA Engineer | FR-EA-01 → FR-EA-16 |
@@ -563,7 +572,7 @@ s3://<bucket>/
 ### 11.2 Detailed Role Definitions
 
 #### Member 1 — Data Engineer
-**Owns:** FR-D-01 → FR-D-07
+**Owns:** FR-D-01 → FR-D-08
 
 | Deliverable | Linked Requirement |
 |---|---|
@@ -572,11 +581,13 @@ s3://<bucket>/
 | Resize all images to 224×224 and apply ImageNet normalization | FR-D-03 |
 | Class balance analysis report (imbalance ratio per class) | FR-D-04 |
 | Configure `WeightedRandomSampler` for the training DataLoader | FR-D-05 |
-| 8+ EDA visualizations: sample grids, class distribution bar chart, image size histogram | FR-D-06, FR-D-04 |
+| Implement augmentation pipeline: brightness/contrast jitter, rotation ±15°, horizontal flip | FR-D-06 |
+| 8+ EDA visualizations: sample grids, class distribution bar chart, image size histogram | FR-D-04 |
 | Upload organized dataset to S3 (`s3://<bucket>/dataset/`) | FR-D-07 |
+| Run a no-augmentation baseline training pass and report accuracy delta vs augmented run | FR-D-08 |
 
 **Depends on:** nothing — starts immediately.
-**Hands off to:** M2 (raw dataset), M3 (splits + sampler config).
+**Hands off to:** M2 (raw dataset), M3 (splits, sampler config, and augmentation pipeline).
 
 ---
 
@@ -593,7 +604,7 @@ s3://<bucket>/
 | Image segmentation using K-means or Watershed | FR-CV-05 |
 | Naive Bayes classifier trained on SIFT feature vectors | FR-CV-06 |
 | CV baseline evaluation report: accuracy, per-class precision/recall/F1, IoU (segmentation), matching accuracy (SIFT) | FR-CV-07 |
-| Baseline accuracy figure for the three-way comparison table | FR-CV-08 |
+| Baseline accuracy figure for the four-way comparison table | FR-CV-08 |
 
 **Depends on:** M1 (dataset splits).
 **Hands off to:** M7 (baseline accuracy numbers for the dashboard comparison table).
@@ -605,17 +616,17 @@ s3://<bucket>/
 
 | Deliverable | Linked Requirement |
 |---|---|
-| Augmentation pipeline (brightness/contrast jitter, rotation ±15°, horizontal flip) | FR-AML-01, FR-AML-04 |
 | MobileNetV2 fine-tuning: freeze backbone 5 epochs, unfreeze last 2 blocks | FR-AML-01, FR-AML-03 |
-| EfficientNet-B0 fine-tuning on same GTSRB split *(Gap 2 fix)* | FR-AML-02 |
-| CrossEntropyLoss with per-class weights + `WeightedRandomSampler` | FR-AML-04, FR-AML-05 |
-| LR scheduler (StepLR or CosineAnnealingLR) | FR-AML-06 |
-| Loss and accuracy curves (train + val) exported per epoch | FR-AML-07 |
-| Export `traffic_sign_model_mobilenetv2.pth` and `traffic_sign_model_efficientnetb0.pth` to S3 | FR-AML-08 |
-| MobileNetV2 test accuracy ≥ 90% | FR-AML-09 |
-| 43×43 confusion matrix heatmap | FR-AML-10 |
-| Full classification report (precision, recall, F1) for all 43 classes | FR-AML-11 |
-| Top-5 accuracy ≥ 98% | FR-AML-12 |
+| EfficientNet-B0 fine-tuning on same GTSRB split | FR-AML-02 |
+| CrossEntropyLoss with per-class weights (uses `WeightedRandomSampler` configured by M1) | FR-AML-04 |
+| LR scheduler (StepLR or CosineAnnealingLR) | FR-AML-05 |
+| Loss and accuracy curves (train + val) exported per epoch | FR-AML-06 |
+| Export `traffic_sign_model_mobilenetv2.pth` and `traffic_sign_model_efficientnetb0.pth` to S3 | FR-AML-07 |
+| MobileNetV2 test accuracy ≥ 90% | FR-AML-08 |
+| 43×43 confusion matrix heatmap | FR-AML-09 |
+| Full classification report (precision, recall, F1) for all 43 classes | FR-AML-10 |
+| Top-5 accuracy ≥ 98% | FR-AML-11 |
+| Top-5 most confused sign pairs from confusion matrix | FR-AML-12 |
 | Architecture comparison table: MobileNetV2 vs EfficientNet-B0 (accuracy + latency) | FR-AML-13 |
 
 **Depends on:** M1 (dataset splits + sampler config).
@@ -644,6 +655,8 @@ s3://<bucket>/
 | Upload all 4 JSON logs to `s3://<bucket>/ea-experiments/` | FR-EA-14 |
 | GA model accuracy ≥ 88%, feature reduction ≥ 30% | FR-EA-15 |
 | Accuracy drop vs full-feature model < 3 percentage points | FR-EA-16 |
+| Second mutation operator (e.g., Swap Mutation) + ≥2 additional configs comparing mutation strategies *(Recommended)* | FR-EA-09b |
+| 2 survivor selection strategies implemented and compared (e.g., generational vs elitism) *(Recommended)* | FR-EA-10b |
 
 **Depends on:** M3 (trained model to extract feature vectors from).
 **Hands off to:** M7 (JSON experiment logs for the dashboard).
@@ -668,7 +681,7 @@ s3://<bucket>/
 
 ---
 
-#### Member 6 — DevOps / CI-CD Engineer *(Gap 1 fix — new dedicated role)*
+#### Member 6 — DevOps / CI-CD Engineer
 **Owns:** FR-CI-01 → FR-CI-05
 
 | Deliverable | Linked Requirement |
@@ -699,7 +712,7 @@ s3://<bucket>/
 | Dashboard: GA convergence chart (4 configs on one chart) | FR-DASH-01 |
 | Dashboard: feature reduction table (accuracy, features used, % reduction per config) | FR-DASH-02 |
 | Dashboard: 43×43 confusion matrix heatmap | FR-DASH-03 |
-| Dashboard: three-way comparison table (CV Baseline, MobileNetV2, EfficientNet-B0, GA-Optimized) | FR-DASH-04 |
+| Dashboard: four-way comparison table (CV Baseline, MobileNetV2, EfficientNet-B0, GA-Optimized) | FR-DASH-04 |
 | Dashboard: Live Prediction tab calling `/predict` inline | FR-DASH-05 |
 | Dashboard reads from S3 experiment logs — no live database dependency | FR-DASH-06 |
 
@@ -735,11 +748,11 @@ Pure sequential execution wastes team capacity — members sit idle waiting for 
 
 | From | To | Artifact |
 |---|---|---|
-| M1 → M2, M3 | Dataset splits in `s3://<bucket>/dataset/` |
-| M3 → M4 | `traffic_sign_model_mobilenetv2.pth` in S3 (for feature extraction) |
-| M3 → M5 | `traffic_sign_model_mobilenetv2.pth` in S3 (for inference) |
-| M4 → M7 | 4× JSON experiment logs in `s3://<bucket>/ea-experiments/` |
-| M2 → M7 | CV baseline accuracy + evaluation report |
-| M3 → M7 | Confusion matrix, classification report, architecture comparison table |
-| M5 → M6 | Complete FastAPI codebase (`api/` directory) |
-| M6 → M7 | Docker image pushed to AWS ECR (`<ecr-repo>:<git-sha>`) |
+| M1 | M2, M3 | Dataset splits and augmentation pipeline in `s3://<bucket>/dataset/` |
+| M3 | M4 | `traffic_sign_model_mobilenetv2.pth` in S3 (for feature extraction) |
+| M3 | M5 | `traffic_sign_model_mobilenetv2.pth` in S3 (for inference) |
+| M4 | M7 | 4× JSON experiment logs in `s3://<bucket>/ea-experiments/` |
+| M2 | M7 | CV baseline accuracy + evaluation report |
+| M3 | M7 | Confusion matrix, classification report, architecture comparison table |
+| M5 | M6 | Complete FastAPI codebase (`api/` directory) |
+| M6 | M7 | Docker image pushed to AWS ECR (`<ecr-repo>:<git-sha>`) |
