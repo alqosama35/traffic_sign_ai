@@ -9,8 +9,8 @@
 | **Project Title** | Traffic Sign Intelligence Platform |
 | **Course Mapping** | Cloud Computing · Advanced ML · Evolutionary Algorithms · Computer Vision |
 | **Team Type** | AI-Only |
-| **Document Version** | 1.1 |
-| **Date** | 2026-04-21 |
+| **Document Version** | 1.2 |
+| **Date** | 2026-04-24 |
 
 ---
 
@@ -82,7 +82,7 @@ The platform bridges four academic courses into one end-to-end system:
 
 1. Preprocess and augment the GTSRB dataset
 2. Train a classical CV baseline (SIFT + Naive Bayes)
-3. Fine-tune a deep learning model (MobileNetV2 **and** EfficientNet-B0)
+3. Fine-tune MobileNetV2 as the primary deep learning model *(EfficientNet-B0 architecture comparison: stretch goal)*
 4. Run GA feature selection experiments across 4 operator configurations
 5. Serve predictions via a REST API deployed on AWS
 6. Store all model artifacts and experiment logs in S3
@@ -153,7 +153,7 @@ The platform bridges four academic courses into one end-to-end system:
 
 **FR-CV-07:** The CV baseline shall be evaluated on the GTSRB test set and report: overall accuracy, per-class precision, recall, F1, IoU (Intersection over Union) for the segmentation step, and descriptor matching accuracy for the SIFT matching step.
 
-**FR-CV-08:** The CV baseline accuracy shall be reported as the lower-bound comparison point in the four-way model comparison table.
+**FR-CV-08:** The CV baseline accuracy shall be reported as the lower-bound comparison point in the three-way model comparison table (CV Baseline vs MobileNetV2 vs GA-Optimized). *(Extends to four-way if the EfficientNet-B0 stretch goal FR-AML-02 is completed.)*
 
 **FR-CV-09:** The system shall implement a Gaussian or Laplacian image pyramid on sample GTSRB images, demonstrate scale-space analysis at a minimum of 3 pyramid levels, and produce a scale-space visualization showing sign detection at multiple scales. This visualization shall be included in the CV evaluation report.
 
@@ -163,7 +163,7 @@ The platform bridges four academic courses into one end-to-end system:
 
 **FR-AML-01:** The system shall fine-tune MobileNetV2 pre-trained on ImageNet on the GTSRB training set.
 
-**FR-AML-02:** The system shall also fine-tune EfficientNet-B0 pre-trained on ImageNet on the same GTSRB training set. Both runs shall complete and produce a saved `.pth` checkpoint. The MobileNetV2 model is the production model; the EfficientNet-B0 result is required for the architecture comparison table.
+**FR-AML-02 *(Stretch):*** The system should also fine-tune EfficientNet-B0 pre-trained on ImageNet on the same GTSRB training set, producing a saved `.pth` checkpoint. This run is required only if time permits; it is not part of the MVP. The MobileNetV2 model is the sole production model. EfficientNet-B0 is trained offline for the architecture comparison table only.
 
 **FR-AML-03:** The training strategy shall freeze the backbone for the first 5 epochs, then unfreeze the last 2 blocks for fine-tuning.
 
@@ -173,7 +173,7 @@ The platform bridges four academic courses into one end-to-end system:
 
 **FR-AML-06:** The trainer shall record and export loss and accuracy curves (train and validation) per epoch.
 
-**FR-AML-07:** The trained model shall be exported as `traffic_sign_model_mobilenetv2.pth` and `traffic_sign_model_efficientnetb0.pth` and uploaded to S3.
+**FR-AML-07:** The trained MobileNetV2 model shall be exported as `traffic_sign_model_mobilenetv2.pth` and uploaded to S3. *(If FR-AML-02 stretch goal is completed, `traffic_sign_model_efficientnetb0.pth` shall also be uploaded.)*
 
 **FR-AML-08:** The MobileNetV2 model shall achieve ≥90% overall accuracy on the GTSRB test set.
 
@@ -185,7 +185,7 @@ The platform bridges four academic courses into one end-to-end system:
 
 **FR-AML-12:** The system shall identify and report the top-5 most confused sign pairs from the confusion matrix.
 
-**FR-AML-13:** The system shall produce an architecture comparison table: MobileNetV2 vs EfficientNet-B0, reporting test accuracy and inference latency per image.
+**FR-AML-13 *(Stretch):*** If FR-AML-02 is completed, the system should produce an architecture comparison table — MobileNetV2 vs EfficientNet-B0 — reporting test accuracy and inference latency per image.
 
 ---
 
@@ -269,7 +269,7 @@ The platform bridges four academic courses into one end-to-end system:
 
 **FR-CLD-01:** The FastAPI inference container shall be hosted on AWS EC2 (t2.medium) or AWS ECS Fargate and be publicly accessible via HTTP during the demo.
 
-**FR-CLD-02:** Model artifacts (`traffic_sign_model_mobilenetv2.pth`, `traffic_sign_model_efficientnetb0.pth`) and EA experiment JSON logs shall be stored in a dedicated AWS S3 bucket.
+**FR-CLD-02:** Model artifacts (`traffic_sign_model_mobilenetv2.pth`) and EA experiment JSON logs shall be stored in a dedicated AWS S3 bucket. *(`traffic_sign_model_efficientnetb0.pth` shall also be uploaded if the EfficientNet-B0 stretch goal FR-AML-02 is completed.)*
 
 **FR-CLD-03:** The inference container shall load the model file from S3 at startup using read-only IAM role credentials.
 
@@ -291,7 +291,7 @@ The platform bridges four academic courses into one end-to-end system:
 
 **FR-DASH-03:** The dashboard shall display the 43×43 confusion matrix heatmap for the MobileNetV2 model.
 
-**FR-DASH-04:** The dashboard shall display the four-way model comparison table: CV Baseline vs MobileNetV2 vs EfficientNet-B0 vs GA-Optimized model, reporting test accuracy and (for DL models) inference latency.
+**FR-DASH-04:** The dashboard shall display a three-way model comparison table: CV Baseline vs MobileNetV2 vs GA-Optimized model, reporting test accuracy and (for DL models) inference latency. *(Extends to a four-way table including EfficientNet-B0 if the stretch goal FR-AML-02 is completed.)*
 
 **FR-DASH-05:** The dashboard shall include a Live Prediction tab with an image upload form that calls `/predict` and displays the result inline.
 
@@ -384,7 +384,7 @@ Response 200  { "status": "ok" }
 s3://<bucket>/
   models/
     traffic_sign_model_mobilenetv2.pth
-    traffic_sign_model_efficientnetb0.pth
+    traffic_sign_model_efficientnetb0.pth   ← stretch goal only
   ea-experiments/
     run_tournament_singlepoint.json
     run_tournament_uniform.json
@@ -426,7 +426,7 @@ s3://<bucket>/
 │  │ Data Pipeline    │   │ GA Engine      │   │ SIFT+NB      │  │
 │  │ Augmentation     │──▶│ Chromosome     │   │ Harris       │  │
 │  │ MobileNetV2      │   │ Fitness Eval   │   │ K-means seg  │  │
-│  │ EfficientNet-B0  │   │ 4 Configs      │   │ Eval report  │  │
+│  │ EfficientNet-B0* │   │ 4 Configs      │   │ Eval report  │  │
 │  └────────┬─────────┘   └───────┬────────┘   └──────────────┘  │
 │           │ .pth                │ JSON logs                     │
 └───────────┼─────────────────────┼───────────────────────────────┘
@@ -457,6 +457,8 @@ s3://<bucket>/
 │  .github/workflows/deploy.yml                                   │
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+> **\* Stretch goal:** EfficientNet-B0 training is not part of the MVP. It is included only if time permits (see FR-AML-02).
 
 ---
 
@@ -495,7 +497,7 @@ s3://<bucket>/
 | Metric | Threshold |
 |---|---|
 | MobileNetV2 test accuracy | ≥ 90% |
-| EfficientNet-B0 test accuracy | Reported (no minimum — comparison only) |
+| EfficientNet-B0 test accuracy *(stretch — FR-AML-02)* | Reported if completed (no minimum — comparison only) |
 | Top-5 accuracy | ≥ 98% |
 | Confusion matrix | Produced and visualized (43×43) |
 | Classification report | All 43 classes, precision/recall/F1 |
@@ -542,14 +544,14 @@ s3://<bucket>/
 | **Budget** | AWS spend capped at $20 via billing alerts; EC2 terminated post-demo |
 | **Timeline** | Single semester (Spring 2026); GA experiments start Week 2 in parallel with model training |
 | **Library constraint** | GA must be implemented from scratch in Python + NumPy — no DEAP or scipy.optimize |
-| **Model serving** | Only MobileNetV2 is served in production; EfficientNet-B0 is trained offline for comparison |
+| **Model serving** | Only MobileNetV2 is served in production; EfficientNet-B0 training is a stretch goal (offline, comparison only — cut first if time is tight) |
 | **Dataset** | GTSRB covers German signs only; generalization to other countries is a known limitation |
 | **Real-world testing** | Phone-camera photos used as informal robustness checks only; not part of official evaluation |
 | **Disclaimer** | All API responses must include the safety disclaimer; the system is not validated for autonomous vehicle use |
 
 ---
 
-*This document supersedes the informal proposal (cloud_proposal.md) and constitutes the binding technical reference for the Traffic Sign Intelligence Platform.*
+*This document (v1.2) supersedes v1.1. It corrects the over-specification of EfficientNet-B0 as a mandatory requirement: per the original source documents (`projects.md` and `cloud_proposal.md`), EfficientNet-B0 is a stretch goal and the first item to cut if time is tight. MobileNetV2 alone satisfies the AML course requirements.*
 
 ---
 
@@ -617,17 +619,17 @@ s3://<bucket>/
 | Deliverable | Linked Requirement |
 |---|---|
 | MobileNetV2 fine-tuning: freeze backbone 5 epochs, unfreeze last 2 blocks | FR-AML-01, FR-AML-03 |
-| EfficientNet-B0 fine-tuning on same GTSRB split | FR-AML-02 |
 | CrossEntropyLoss with per-class weights (uses `WeightedRandomSampler` configured by M1) | FR-AML-04 |
 | LR scheduler (StepLR or CosineAnnealingLR) | FR-AML-05 |
 | Loss and accuracy curves (train + val) exported per epoch | FR-AML-06 |
-| Export `traffic_sign_model_mobilenetv2.pth` and `traffic_sign_model_efficientnetb0.pth` to S3 | FR-AML-07 |
+| Export `traffic_sign_model_mobilenetv2.pth` to S3 | FR-AML-07 |
 | MobileNetV2 test accuracy ≥ 90% | FR-AML-08 |
 | 43×43 confusion matrix heatmap | FR-AML-09 |
 | Full classification report (precision, recall, F1) for all 43 classes | FR-AML-10 |
 | Top-5 accuracy ≥ 98% | FR-AML-11 |
 | Top-5 most confused sign pairs from confusion matrix | FR-AML-12 |
-| Architecture comparison table: MobileNetV2 vs EfficientNet-B0 (accuracy + latency) | FR-AML-13 |
+| *(Stretch)* EfficientNet-B0 fine-tuning + export `traffic_sign_model_efficientnetb0.pth` to S3 | FR-AML-02 |
+| *(Stretch)* Architecture comparison table: MobileNetV2 vs EfficientNet-B0 (accuracy + latency) | FR-AML-13 |
 
 **Depends on:** M1 (dataset splits + sampler config).
 **Hands off to:** M4 (trained model for feature vector extraction), M5 (`.pth` file for inference).
@@ -712,7 +714,7 @@ s3://<bucket>/
 | Dashboard: GA convergence chart (4 configs on one chart) | FR-DASH-01 |
 | Dashboard: feature reduction table (accuracy, features used, % reduction per config) | FR-DASH-02 |
 | Dashboard: 43×43 confusion matrix heatmap | FR-DASH-03 |
-| Dashboard: four-way comparison table (CV Baseline, MobileNetV2, EfficientNet-B0, GA-Optimized) | FR-DASH-04 |
+| Dashboard: three-way comparison table (CV Baseline, MobileNetV2, GA-Optimized); extends to four-way if FR-AML-02 stretch goal is completed | FR-DASH-04 |
 | Dashboard: Live Prediction tab calling `/predict` inline | FR-DASH-05 |
 | Dashboard reads from S3 experiment logs — no live database dependency | FR-DASH-06 |
 
