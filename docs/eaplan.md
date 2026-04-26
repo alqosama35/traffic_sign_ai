@@ -51,7 +51,7 @@ The following assumptions were required because they cannot be derived directly 
 | 3 | GA Core Operators | All atomic GA building blocks | 2 days |
 | 4 | Fitness Sharing & Diversity | Niche-based diversity preservation | 1 day |
 | 5 | GA Loop, Runner & JSON Logging | 4 complete experiment runs + JSON logs | 2 days |
-| 6 | Recommended Extensions | Bonus mutation + survivor selection variants | 1–2 days |
+| 6 | Recommended Extensions ✅ | Bonus mutation + survivor selection variants | 1–2 days |
 | 7 | S3 Upload & Cloud Integration | Logs uploaded to S3 | 0.5 day |
 | 8 | Validation & Acceptance Testing | All SRS criteria confirmed; handoff artifacts ready | 1 day |
 
@@ -582,9 +582,11 @@ This is the integration phase — all components from Phases 2–4 are composed 
 
 ---
 
-## Phase 6 — Recommended Extensions (Bonus Operators & Experiments)
+## Phase 6 — Recommended Extensions (Bonus Operators & Experiments) ✅ DONE
 
 *Complete only after all mandatory runs in Phase 5 are verified. These satisfy FR-EA-09b and FR-EA-10b for bonus marks.*
+
+**Status (2026-04-26):** Phase 6 implemented. `swap_mutation` added to `ea/operators/mutation.py`. Three extension configs added via `get_extension_configs()` in `ea/experiment.py`: `tournament_singlepoint_generational_swapmutation_42`, `roulette_uniform_generational_swapmutation_42`, `tournament_singlepoint_elitism5_bitflip_42`. `run_experiments.py` now runs all 6 configs (4 mandatory + 2 extension). Elitism was already implemented in `ea/operators/survivor.py` from Phase 4.
 
 ### a) Learning Requirements
 - Swap mutation behavior on binary strings (differs from permutation representations)

@@ -33,7 +33,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import numpy as np
 
-from ea.experiment import get_mandatory_configs
+from ea.experiment import get_extension_configs, get_mandatory_configs
 from ea.ga import run_ga
 from ea.logger import build_log, save_log
 
@@ -77,7 +77,7 @@ def main() -> None:
         "",
         f"Subsample size  : {_SUBSAMPLE_SIZE:,} / 33,318 training rows (~{_SUBSAMPLE_SIZE/33318:.0%})",
         f"Parallel workers: {workers} threads (n_jobs={_N_JOBS})",
-        f"Configs to run  : 4 mandatory (FR-EA-12)",
+        f"Configs to run  : 4 mandatory + 2 extension = 6 total (FR-EA-12, FR-EA-09b, FR-EA-10b)",
         "",
         f"OMP_NUM_THREADS    = {os.environ['OMP_NUM_THREADS']}  (limits OpenMP thread pool)",
         f"OPENBLAS_NUM_THREADS = {os.environ['OPENBLAS_NUM_THREADS']}  (limits OpenBLAS thread pool)",
@@ -97,7 +97,7 @@ def main() -> None:
     print(f"  Val   : {X_val.shape}  ({X_val.nbytes / 1e6:.0f} MB)")
     print(f"  n={n}  sigma_share={sigma_share:.0f}  baseline_acc={baseline_acc:.4f}")
 
-    configs = get_mandatory_configs()
+    configs = get_mandatory_configs() + get_extension_configs()
     for cfg in configs:
         cfg.sigma_share    = sigma_share
         cfg.subsample_size = _SUBSAMPLE_SIZE
