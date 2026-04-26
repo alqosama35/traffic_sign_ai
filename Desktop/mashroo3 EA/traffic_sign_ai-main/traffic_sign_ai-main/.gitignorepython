@@ -1,0 +1,1 @@
+ea/results/  -c "import ea; print('ea package OK')"
