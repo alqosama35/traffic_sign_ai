@@ -102,6 +102,34 @@ def extract_split(
     return X, y
 
 
+def apply_variance_filter(
+    X: np.ndarray,
+    target: int = 900,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Keep the top-`target` features ranked by variance across training samples.
+
+    Uses a pure-numpy argsort on column variances — no sklearn dependency here.
+    Returns exactly `target` features (or all features if X already has <= target).
+
+    Args:
+        X: float32 array of shape (N, n) — full feature matrix (training set).
+        target: number of features to keep.
+
+    Returns:
+        X_filtered: float32 array of shape (N, target)
+        mask: bool array of shape (n,) — True at the kept feature positions.
+    """
+    n = X.shape[1]
+    if n <= target:
+        return X.astype(np.float32), np.ones(n, dtype=bool)
+
+    variances = X.var(axis=0)
+    top_indices = np.argsort(variances)[-target:]
+    mask = np.zeros(n, dtype=bool)
+    mask[top_indices] = True
+    return X[:, mask].astype(np.float32), mask
+
+
 if __name__ == "__main__":
     _REPO_ROOT = Path(__file__).resolve().parents[1]
     _CHECKPOINT = _REPO_ROOT / "training" / "outputs" / "model" / "mobilenetv2_inference.pth"

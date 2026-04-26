@@ -19,7 +19,8 @@ import sys
 # Limit BLAS/OpenMP internal thread pools to 1 thread each.
 # Must be set BEFORE numpy/sklearn are imported — these libraries read the
 # variables once at import time and ignore later changes.
-# Combined with _N_JOBS=25% Python threads this keeps total CPU usage ~25%.
+# With _N_JOBS=-1 (N Python threads) × 1 internal BLAS thread each = N total
+# threads, cleanly mapping one thread per CPU core without oversubscription.
 os.environ.setdefault("OMP_NUM_THREADS", "1")
 os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
 os.environ.setdefault("MKL_NUM_THREADS", "1")
@@ -40,8 +41,8 @@ from ea.logger import build_log, save_log
 _DATA_DIR    = Path(__file__).resolve().parent / "data"
 _RESULTS_DIR = Path(__file__).resolve().parent / "results"
 
-_SUBSAMPLE_SIZE = 8000                         # training rows per fitness eval
-_N_JOBS         = 1  # single thread — safe for long unattended runs (cool & slow)
+_SUBSAMPLE_SIZE = 5000   # training rows per fitness eval (was 8000 — stratified sampling)
+_N_JOBS         = -1    # use all CPU cores via ThreadPoolExecutor (was 1)
 
 
 def _load_features() -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, float]:
@@ -69,14 +70,59 @@ def _box(lines: list[str], width: int = 62) -> str:
     return f"{top}\n{body}\n{bot}"
 
 
+def _apply_or_load_filter(
+    X_train: np.ndarray,
+    X_val: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray, "np.ndarray | None"]:
+    """Apply variance pre-filter or load cached result.
+
+    Returns (X_train_filtered, X_val_filtered, filter_mask).
+    filter_mask is None when the original dimension is already <= 900.
+    """
+    from ea.extract_features import apply_variance_filter
+
+    _FILTER_TARGET = 900
+    filter_mask_path      = _DATA_DIR / "feature_filter_mask.npy"
+    X_train_filtered_path = _DATA_DIR / "X_train_filtered.npy"
+    X_val_filtered_path   = _DATA_DIR / "X_val_filtered.npy"
+
+    orig_dim = X_train.shape[1]
+    if orig_dim <= _FILTER_TARGET:
+        print(f"  Pre-filter skipped: original dim {orig_dim} <= target {_FILTER_TARGET}")
+        return X_train, X_val, None
+
+    if X_train_filtered_path.exists() and filter_mask_path.exists():
+        filter_mask = np.load(filter_mask_path)
+        X_tr_f      = np.load(X_train_filtered_path)
+        X_va_f      = np.load(X_val_filtered_path)
+        print(
+            f"  Loaded cached pre-filtered features: "
+            f"{int(filter_mask.sum())} / {orig_dim} kept"
+        )
+        return X_tr_f, X_va_f, filter_mask
+
+    print(f"  Applying variance pre-filter (top {_FILTER_TARGET} / {orig_dim} features)...")
+    X_tr_f, filter_mask = apply_variance_filter(X_train, target=_FILTER_TARGET)
+    X_va_f = X_val[:, filter_mask]
+    np.save(X_train_filtered_path, X_tr_f)
+    np.save(X_val_filtered_path,   X_va_f)
+    np.save(filter_mask_path,      filter_mask)
+    removed = orig_dim - int(filter_mask.sum())
+    print(
+        f"  Pre-filter done: {int(filter_mask.sum())} kept, "
+        f"{removed} removed ({removed / orig_dim:.1%}) — cached to data/"
+    )
+    return X_tr_f, X_va_f, filter_mask
+
+
 def main() -> None:
-    workers = _N_JOBS
+    actual_workers = os.cpu_count() if _N_JOBS == -1 else max(1, _N_JOBS)
 
     print(_box([
         "EA Feature Selection -- Experiment Runner",
         "",
-        f"Subsample size  : {_SUBSAMPLE_SIZE:,} / 33,318 training rows (~{_SUBSAMPLE_SIZE/33318:.0%})",
-        f"Parallel workers: {workers} threads (n_jobs={_N_JOBS})",
+        f"Subsample size  : {_SUBSAMPLE_SIZE:,} / ~33k rows (~{_SUBSAMPLE_SIZE/33318:.0%}) — stratified",
+        f"Parallel workers: {actual_workers} threads (n_jobs={_N_JOBS})",
         f"Configs to run  : 4 mandatory + 2 extension = 6 total (FR-EA-12, FR-EA-09b, FR-EA-10b)",
         "",
         f"OMP_NUM_THREADS    = {os.environ['OMP_NUM_THREADS']}  (limits OpenMP thread pool)",
@@ -89,12 +135,15 @@ def main() -> None:
 
     print("\nLoading feature arrays...")
     X_train, y_train, X_val, y_val, baseline_acc = _load_features()
+    print(f"  Train : {X_train.shape}  ({X_train.nbytes / 1e6:.0f} MB)")
+    print(f"  Val   : {X_val.shape}  ({X_val.nbytes / 1e6:.0f} MB)")
+
+    # ── Variance pre-filter ───────────────────────────────────────────────────
+    X_train, X_val, filter_mask = _apply_or_load_filter(X_train, X_val)
 
     n           = X_train.shape[1]
     sigma_share = 0.2 * n
 
-    print(f"  Train : {X_train.shape}  ({X_train.nbytes / 1e6:.0f} MB)")
-    print(f"  Val   : {X_val.shape}  ({X_val.nbytes / 1e6:.0f} MB)")
     print(f"  n={n}  sigma_share={sigma_share:.0f}  baseline_acc={baseline_acc:.4f}")
 
     configs = get_mandatory_configs() + get_extension_configs()
@@ -138,7 +187,7 @@ def main() -> None:
             f"Mutation  : {cfg.mutation:<12}  Survivor  : {cfg.survivor}",
             f"Pop size  : {cfg.pop_size:<12}  Max gens  : {cfg.max_generations}",
             f"Subsample : {cfg.subsample_size:<12}  sigma_share: {cfg.sigma_share:.0f}",
-            f"Seed      : {cfg.seed:<12}  Workers   : {workers}",
+            f"Seed      : {cfg.seed:<12}  Workers   : {actual_workers}",
             "",
             f"Checkpoint: {checkpoint_path.name}",
         ]))
@@ -155,7 +204,7 @@ def main() -> None:
 
         run_time = time.time() - t0
 
-        log      = build_log(cfg, result, baseline_acc, run_time)
+        log      = build_log(cfg, result, baseline_acc, run_time, filter_mask=filter_mask)
         log_path = save_log(log, str(_RESULTS_DIR))
 
         # ── Delete checkpoint only after JSON is safely written ───────────────

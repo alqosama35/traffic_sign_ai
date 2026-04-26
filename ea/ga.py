@@ -15,15 +15,49 @@ from ea.operators.mutation import apply_mutation
 from ea.population import init_population
 
 
-def _is_stagnant(best_history: list[float], window: int = 20) -> bool:
+def _is_stagnant(best_history: list[float], window: int = 12) -> bool:
     """Return True when best raw fitness has not improved for `window` gens.
 
     Uses raw (not shared) fitness because shared fitness fluctuates as
     population composition changes even when the best chromosome is stable.
+    Window reduced from 20 to 12 to cut runtime while staying within the
+    10–20% of max_generations (100) range recommended in GA literature.
     """
     if len(best_history) <= window:
         return False
     return best_history[-window] == best_history[-1]
+
+
+def _stratified_subsample(
+    X: np.ndarray, y: np.ndarray, size: int
+) -> tuple[np.ndarray, np.ndarray]:
+    """Draw a class-proportional subsample of exactly `size` rows.
+
+    Pure-numpy implementation — no sklearn import in the hot path.
+    Each class contributes rows proportional to its share in y, with a
+    minimum of 1 row per class so no class is completely excluded.
+    """
+    classes, counts = np.unique(y, return_counts=True)
+    total = len(y)
+    chosen: list[np.ndarray] = []
+    allocated = 0
+    for cls, cnt in zip(classes, counts):
+        cls_idx = np.where(y == cls)[0]
+        n_cls = max(1, round(size * cnt / total))
+        n_cls = min(n_cls, len(cls_idx))
+        chosen.append(np.random.choice(cls_idx, size=n_cls, replace=False))
+        allocated += n_cls
+
+    idx = np.concatenate(chosen)
+    if len(idx) > size:
+        idx = idx[:size]
+    elif len(idx) < size:
+        remaining = np.setdiff1d(np.arange(total), idx)
+        pad = np.random.choice(remaining, size=size - len(idx), replace=False)
+        idx = np.concatenate([idx, pad])
+
+    np.random.shuffle(idx)
+    return X[idx], y[idx]
 
 
 def _resolve_workers(n_jobs: int | None) -> int | None:
@@ -172,11 +206,9 @@ def run_ga(
                 f"| GlobalBest so far: {global_best_fitness:.4f}{stagnant_tag}"
             )
 
-        # ── Fix subsample once per generation ─────────────────────────────────
+        # ── Fix subsample once per generation (stratified) ───────────────────
         if config.subsample_size and config.subsample_size < len(X_train):
-            idx = np.random.choice(len(X_train), size=config.subsample_size, replace=False)
-            X_tr = X_train[idx]
-            y_tr = y_train[idx]
+            X_tr, y_tr = _stratified_subsample(X_train, y_train, config.subsample_size)
         else:
             X_tr, y_tr = X_train, y_train
 

@@ -25,7 +25,7 @@ class ExperimentConfig:
     survivor_fn: Callable
 
     # GA hyper-parameters
-    pop_size: int = 50
+    pop_size: int = 35
     max_generations: int = 100
     mutation_rate: float = 0.01       # FR-EA-09: exactly p=0.01 per bit
     crossover_rate: float = 0.8
