@@ -1,0 +1,35 @@
+# ============================================================
+# FR-CI-02: Docker Compose — API Service Definition
+# - Exposes port 8000
+# - Passes model path as environment variable
+# - Restart policy satisfies NFR-REL-01
+#
+# USAGE:
+#   CI pipeline / production:
+#     docker-compose -f docker-compose.yml up --build
+#     (override file intentionally excluded — no hot reload)
+#
+#   Local development (hot reload ON):
+#     docker-compose up --build
+#     (auto-merges docker-compose.override.yml)
+# ============================================================
+
+version: "3.8"
+
+services:
+  api:
+    # Build the image from the Dockerfile in this directory.
+    build: .
+
+    # Map port 8000 on your machine → port 8000 inside the container.
+    ports:
+      - "8000:8000"
+
+    environment:
+      # MODEL_PATH: never hardcoded — NFR-MAINT-03 + NFR-SEC-04.
+      # Set this in your .env file locally or via GitHub secrets in CI.
+      - MODEL_PATH=${MODEL_PATH:-/app/models/traffic_sign_model_mobilenetv2.pth}
+
+    # restart: always satisfies NFR-REL-01:
+    # "The Docker container shall restart automatically on crash"
+    restart: always
