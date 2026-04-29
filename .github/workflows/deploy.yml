@@ -1,0 +1,297 @@
+# ============================================================
+# FR-CI-03: GitHub Actions CI/CD Pipeline
+# FR-CI-04: Every stage must pass — failure blocks the pipeline
+# FR-CI-05: Image tagged as <ecr-repo>:<git-sha>
+#
+# Triggers on every push to the main branch.
+# Stages (in order):
+#   1. build   → docker build the inference image
+#   2. test    → run test_api.py against the live container
+#   3. push    → push tagged image to AWS ECR
+#   4. deploy  → SSH into EC2, docker pull + restart
+# ============================================================
+
+name: Build · Test · Push · Deploy
+
+# ── Trigger ────────────────────────────────────────────────
+# FR-CI-03: Run on every push to main.
+# FR-CI-04: Pull request merges to main are also blocked
+#           if the workflow fails (enforced via GitHub branch
+#           protection rules — enable in repo Settings →
+#           Branches → Require status checks to pass).
+on:
+  push:
+    branches:
+      - main
+
+# ── Environment shared across all jobs ─────────────────────
+env:
+  # ✏️  Replace with your actual AWS account ID and region.
+  # These are not secrets — they are not sensitive values.
+  AWS_REGION: us-east-1
+  ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com
+
+  # ✏️  Replace with the name of your ECR repository.
+  ECR_REPOSITORY: traffic-sign-api
+
+  # FR-CI-05: Tag every image with the Git commit SHA.
+  # github.sha is the full 40-char hash. We use the first 7
+  # chars (short SHA) — still unique, much more readable.
+  IMAGE_TAG: ${{ github.sha }}
+
+# ── Jobs ───────────────────────────────────────────────────
+jobs:
+  # ══════════════════════════════════════════════════════════
+  # STAGE 1 — BUILD
+  # FR-CI-03 §1: docker build the inference image.
+  # FR-CI-04: If this job fails, all downstream jobs are
+  #           skipped automatically (needs: chain below).
+  # ══════════════════════════════════════════════════════════
+  build:
+    name: "Stage 1 · Build"
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1a. Check out the repository code onto the runner.
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # 1b. Build the Docker image using the Dockerfile.
+      #     Tags it as ECR_REGISTRY/ECR_REPOSITORY:git-sha
+      #     and also as :latest for convenience.
+      #     FR-CI-05: <ecr-repo>:<git-sha> convention enforced here.
+      - name: Build Docker image
+        run: |
+          docker build \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:latest \
+            .
+
+      # 1c. Save the built image to a tar file so the test
+      #     job can load it without rebuilding from scratch.
+      #     This is passed between jobs via GitHub Actions cache.
+      - name: Save image to tar
+        run: |
+          docker save $ECR_REGISTRY/$ECR_REPOSITORY:latest \
+            -o /tmp/inference-image.tar
+
+      - name: Upload image tar as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: inference-image
+          path: /tmp/inference-image.tar
+          retention-days: 1
+
+  # ══════════════════════════════════════════════════════════
+  # STAGE 2 — TEST
+  # FR-CI-03 §2: run test_api.py against the live container.
+  # FR-CI-04: needs: build — this stage is skipped entirely
+  #           if the build stage failed.
+  # ══════════════════════════════════════════════════════════
+  test:
+    name: "Stage 2 · Test"
+    runs-on: ubuntu-latest
+    needs: build # FR-CI-04: blocked if build fails
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # 2a. Download the image tar that the build job saved.
+      - name: Download image tar
+        uses: actions/download-artifact@v4
+        with:
+          name: inference-image
+          path: /tmp
+
+      # 2b. Load the image into this runner's Docker daemon.
+      - name: Load Docker image
+        run: docker load -i /tmp/inference-image.tar
+
+      # 2c. Start the container in detached mode.
+      #     MODEL_PATH points to the bundled dummy/test model
+      #     or a real model if you bake it into the image.
+      #     The container must be up before test_api.py runs.
+      - name: Start container
+        run: |
+          docker run -d \
+            --name inference-api \
+            -p 8000:8000 \
+            -e MODEL_PATH=/app/models/traffic_sign_model_mobilenetv2.pth \
+            $ECR_REGISTRY/$ECR_REPOSITORY:latest
+
+      # 2d. Wait up to 30 s for the API to become healthy.
+      #     Polls /health every 2 s. Fails the step (and the
+      #     whole pipeline) if the container never becomes ready.
+      - name: Wait for API to be healthy
+        run: |
+          echo "Waiting for API health check..."
+          for i in $(seq 1 15); do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+              http://localhost:8000/health || echo "000")
+            if [ "$STATUS" = "200" ]; then
+              echo "API is healthy."
+              exit 0
+            fi
+            echo "Attempt $i: HTTP $STATUS — retrying in 2s..."
+            sleep 2
+          done
+          echo "ERROR: API did not become healthy in 30 seconds."
+          docker logs inference-api
+          exit 1
+
+      # 2e. Install test dependencies (requests is the only
+      #     one test_api.py needs beyond the stdlib).
+      - name: Install test dependencies
+        run: pip install requests
+
+      # 2f. Run test_api.py — the script must exit 0 on success
+      #     and exit 1 (or raise an AssertionError) on failure.
+      #     FR-API-06: asserts HTTP 200, valid class, confidence
+      #     in [0,1], and top_3 contains exactly 3 entries.
+      - name: Run test_api.py
+        run: python test_api.py
+
+      # 2g. Always print container logs on failure so you can
+      #     debug without SSH-ing anywhere.
+      - name: Print container logs on failure
+        if: failure()
+        run: docker logs inference-api
+
+  # ══════════════════════════════════════════════════════════
+  # STAGE 3 — PUSH TO ECR
+  # FR-CI-03 §3: push the tagged image to AWS ECR.
+  # FR-CI-04: needs: test — blocked if tests fail.
+  # ══════════════════════════════════════════════════════════
+  push-to-ecr:
+    name: "Stage 3 · Push to ECR"
+    runs-on: ubuntu-latest
+    needs: test # FR-CI-04: blocked if test fails
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # 3a. Download the already-built image (no rebuild needed).
+      - name: Download image tar
+        uses: actions/download-artifact@v4
+        with:
+          name: inference-image
+          path: /tmp
+
+      - name: Load Docker image
+        run: docker load -i /tmp/inference-image.tar
+
+      # 3b. Authenticate Docker to AWS ECR.
+      #     Uses AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY
+      #     stored as GitHub repository secrets (never in code).
+      #     FR-CI-03 §3 + NFR-SEC-04.
+      - name: Authenticate to AWS ECR
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        run: |
+          aws ecr get-login-password --region $AWS_REGION | \
+            docker login \
+              --username AWS \
+              --password-stdin $ECR_REGISTRY
+
+      # 3c. Push both the git-sha tag and :latest.
+      #     FR-CI-05: <ecr-repo>:<git-sha> is the traceable tag.
+      #     :latest is a convenience alias for the deploy stage.
+      - name: Push image to ECR
+        run: |
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+
+  # ══════════════════════════════════════════════════════════
+  # STAGE 4 — DEPLOY TO EC2
+  # FR-CI-03 §4: SSH into EC2, docker pull + restart.
+  # FR-CI-04: needs: push-to-ecr — blocked if push fails.
+  # ══════════════════════════════════════════════════════════
+  deploy:
+    name: "Stage 4 · Deploy to EC2"
+    runs-on: ubuntu-latest
+    needs: push-to-ecr # FR-CI-04: blocked if push fails
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # 4a. Write the EC2 SSH private key from GitHub secrets
+      #     to a temp file, then lock down its permissions.
+      #     The key must be stored as secret EC2_SSH_KEY.
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          # Trust the EC2 host so SSH doesn't prompt for confirmation.
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+
+      # 4b. SSH into EC2 and run the update sequence:
+      #     1. Authenticate EC2's Docker daemon to ECR
+      #     2. Pull the new image (the git-sha tagged version)
+      #     3. Stop + remove the old container
+      #     4. Start a fresh container from the new image
+      #
+      #     EC2_HOST    → your EC2 public IP or DNS (GitHub secret)
+      #     EC2_USER    → SSH username, typically `ubuntu` for
+      #                   Ubuntu AMIs or `ec2-user` for Amazon Linux
+      #     MODEL_PATH  → path to the .pth file on the EC2 instance
+      - name: Deploy on EC2
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        run: |
+          ssh -i ~/.ssh/deploy_key \
+              -o StrictHostKeyChecking=no \
+              ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} \
+              "
+                set -e
+
+                # Authenticate Docker on the EC2 instance to ECR
+                aws ecr get-login-password --region $AWS_REGION | \
+                  docker login \
+                    --username AWS \
+                    --password-stdin $ECR_REGISTRY
+
+                # Pull the exact image that was just pushed (git-sha tag)
+                docker pull $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+
+                # Stop and remove the old container (ignore errors if
+                # it doesn't exist yet — first deploy)
+                docker stop inference-api 2>/dev/null || true
+                docker rm   inference-api 2>/dev/null || true
+
+                # Start the new container
+                # MODEL_PATH points to the .pth file on the EC2 machine.
+                # Update this path to match where your model is stored.
+                docker run -d \
+                  --name inference-api \
+                  --restart always \
+                  -p 8000:8000 \
+                  -e MODEL_PATH=${{ secrets.MODEL_PATH }} \
+                  $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+
+                echo 'Deployment complete.'
+              "
+
+      # 4c. Verify the deployed container is healthy by hitting
+      #     /health on the EC2 public IP. Fails the pipeline
+      #     if the newly deployed container is not responding.
+      - name: Verify deployment health
+        run: |
+          echo "Checking deployed API health..."
+          for i in $(seq 1 10); do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+              http://${{ secrets.EC2_HOST }}:8000/health || echo "000")
+            if [ "$STATUS" = "200" ]; then
+              echo "Deployment verified — API is healthy."
+              exit 0
+            fi
+            echo "Attempt $i: HTTP $STATUS — retrying in 3s..."
+            sleep 3
+          done
+          echo "ERROR: Deployed API did not respond in time."
+          exit 1
