@@ -1,7 +1,7 @@
 import numpy as np
 import os
 import time
-from ea.experiment import MANDATORY_CONFIGS
+from ea.experiment import MANDATORY_CONFIGS, EXTENSION_CONFIGS
 from ea.ga import run_ga
 from ea.logger import build_log, save_log
 from ea.fitness import benchmark_fitness_eval
@@ -28,7 +28,7 @@ def main():
     # ── Set sigma_share for all configs ─────────────────────────────────────
     n = X_train.shape[1]
     sigma_share = 0.2 * n
-    for config in MANDATORY_CONFIGS:
+    for config in MANDATORY_CONFIGS + EXTENSION_CONFIGS:
         config.sigma_share = sigma_share
 
     # ── Run all 4 experiments ────────────────────────────────────────────────
@@ -74,3 +74,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+    
