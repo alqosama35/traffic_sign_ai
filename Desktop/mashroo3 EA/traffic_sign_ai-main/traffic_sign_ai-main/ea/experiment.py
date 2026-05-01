@@ -40,6 +40,9 @@ MANDATORY_CONFIGS = [
         crossover_fn = single_point_crossover,
         mutation_fn  = bit_flip_mutation,
         survivor_fn  = generational_replacement,
+        subsample_size = 5000,
+        pop_size     = 20,
+        max_generations = 30,
     ),
     ExperimentConfig(
         run_id      = "tournament_uniform_generational_bitflip_42",
@@ -51,6 +54,9 @@ MANDATORY_CONFIGS = [
         crossover_fn = uniform_crossover,
         mutation_fn  = bit_flip_mutation,
         survivor_fn  = generational_replacement,
+        subsample_size = 5000,
+        pop_size     = 20,
+        max_generations = 30,
     ),
     ExperimentConfig(
         run_id      = "roulette_singlepoint_generational_bitflip_42",
@@ -62,6 +68,9 @@ MANDATORY_CONFIGS = [
         crossover_fn = single_point_crossover,
         mutation_fn  = bit_flip_mutation,
         survivor_fn  = generational_replacement,
+        subsample_size = 5000,
+        pop_size     = 20,
+        max_generations = 30,
     ),
     ExperimentConfig(
         run_id      = "roulette_uniform_generational_bitflip_42",
@@ -73,5 +82,8 @@ MANDATORY_CONFIGS = [
         crossover_fn = uniform_crossover,
         mutation_fn  = bit_flip_mutation,
         survivor_fn  = generational_replacement,
+        subsample_size = 5000,
+        pop_size     = 20,
+        max_generations = 30,
     ),
 ]

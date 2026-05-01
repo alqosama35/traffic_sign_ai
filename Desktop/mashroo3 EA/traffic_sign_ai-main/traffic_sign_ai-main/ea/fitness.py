@@ -1,7 +1,8 @@
 import numpy as np
-from sklearn.svm import LinearSVC
+from sklearn.linear_model import SGDClassifier
 from sklearn.metrics import accuracy_score
 import time
+
 
 def evaluate_fitness(chromosome, X_train, y_train, X_val, y_val, subsample_size=None):
     """
@@ -28,7 +29,7 @@ def evaluate_fitness(chromosome, X_train, y_train, X_val, y_val, subsample_size=
         y_tr = y_train
 
     # Train classifier and evaluate
-    clf = LinearSVC(C=0.1, max_iter=2000)
+    clf = SGDClassifier(loss='hinge', max_iter=100, random_state=42)
     clf.fit(X_tr, y_tr)
     preds = clf.predict(X_va)
     return accuracy_score(y_val, preds)
@@ -41,7 +42,6 @@ def benchmark_fitness_eval(X_train, y_train, X_val, y_val):
     """
     n = X_train.shape[1]
     chromosome = np.random.randint(0, 2, size=n).astype(bool)
-    # Ensure at least one feature selected
     if not chromosome.any():
         chromosome[0] = True
 
