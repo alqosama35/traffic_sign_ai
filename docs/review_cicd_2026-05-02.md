@@ -1,4 +1,4 @@
-```
+
 ══════════════════════════════════════════════════════════════
   CODE REVIEW REPORT
   Reviewed: CI/CD — Dockerfile, docker-compose.yml,
