@@ -1,35 +1,34 @@
 # ============================================================
-# FR-CI-02: Docker Compose — API Service Definition
-# - Exposes port 8000
-# - Passes model path as environment variable
-# - Restart policy satisfies NFR-REL-01
+# FR-CI-02: Docker Compose — production / CI base file
 #
-# USAGE:
-#   CI pipeline / production:
-#     docker-compose -f docker-compose.yml up --build
-#     (override file intentionally excluded — no hot reload)
-#
-#   Local development (hot reload ON):
-#     docker-compose up --build
-#     (auto-merges docker-compose.override.yml)
+# Usage:
+#   CI / production:  docker-compose -f docker-compose.yml up --build
+#   Local dev:        docker-compose up --build
+#                     (auto-merges docker-compose.override.yml)
 # ============================================================
 
-version: "3.8"
+# Issue 14 fix: version: key removed — deprecated in Compose v2
 
 services:
   api:
-    # Build the image from the Dockerfile in this directory.
     build: .
-
-    # Map port 8000 on your machine → port 8000 inside the container.
     ports:
       - "8000:8000"
-
     environment:
-      # MODEL_PATH: never hardcoded — NFR-MAINT-03 + NFR-SEC-04.
-      # Set this in your .env file locally or via GitHub secrets in CI.
       - MODEL_PATH=${MODEL_PATH:-/app/models/traffic_sign_model_mobilenetv2.pth}
-
-    # restart: always satisfies NFR-REL-01:
-    # "The Docker container shall restart automatically on crash"
+      - API_KEY=${API_KEY}
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+      - ENABLE_CLOUDWATCH=${ENABLE_CLOUDWATCH:-0}
+      # Issue 18 fix: tell torch how many CPUs the container actually has
+      - CPU_LIMIT=2
+    # NFR-REL-01: restart automatically on crash
     restart: always
+    # Issue 21 fix: resource limits so container can't starve the host
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 2G
+        reservations:
+          cpus: "0.5"
+          memory: 512M

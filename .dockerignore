@@ -1,0 +1,34 @@
+# ── Python ────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# ── Training / datasets (never goes in the image) ─────────
+data/
+dataset/
+training/outputs/
+EDA/
+*.pth
+*.pkl
+*.h5
+*.csv
+
+# ── Notebooks ─────────────────────────────────────────────
+*.ipynb
+.ipynb_checkpoints/
+
+# ── Git and CI ────────────────────────────────────────────
+.git/
+.github/
+
+# ── Secrets ───────────────────────────────────────────────
+.env
+*.env
+
+# ── Docs / misc ───────────────────────────────────────────
+docs/
+*.md
+*.log
+*.tar

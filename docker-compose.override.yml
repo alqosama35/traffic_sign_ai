@@ -1,46 +1,20 @@
 # ============================================================
-# LOCAL DEVELOPMENT ONLY — Hot Reload Override
-#
-# This file is automatically merged by Docker Compose when you
-# run `docker-compose up` locally. It is NEVER used in CI.
-#
-# What this adds on top of docker-compose.yml:
-#   1. Volume mount  → your local api/ folder is mounted into
-#                      the container live. Code changes are
-#                      instantly visible without rebuilding.
-#   2. --reload flag → uvicorn watches for file changes and
-#                      restarts the server automatically.
-#   3. Removes restart: always → you don't want auto-restart
-#                      during dev; a crash should stay crashed
-#                      so you can read the error.
-#
-# NEVER commit secrets or model weights here.
-# NEVER use this file in CI — always pass -f docker-compose.yml
-# explicitly in your GitHub Actions workflow.
+# LOCAL DEVELOPMENT ONLY — auto-merged by Docker Compose
+# Never used in CI (CI passes -f docker-compose.yml explicitly)
 # ============================================================
-
-version: "3.8"
 
 services:
   api:
-    # Override the CMD from the Dockerfile to add --reload.
-    # uvicorn will watch all .py files inside the container
-    # and restart automatically when any of them change.
+    # Override CMD: add --reload so uvicorn restarts on file save
     command: uvicorn api.app:app --host 0.0.0.0 --port 8000 --reload
-
     volumes:
-      # Mount your local api/ directory into the container.
-      # Format: "./host/path:./container/path"
-      # Any file you save in api/ on your machine is
-      # immediately reflected inside the running container.
+      # Live mount: changes to api/ are instant — no rebuild needed
       - ./api:/app/api
-
-    # Override restart policy — during dev you want the
-    # container to stay stopped on crash so you can read logs.
-    restart: "no"
-
     environment:
-      # Explicitly flag this as a dev environment.
-      - ENV=development
-      # MODEL_PATH still comes from your .env file.
+      # Issue 5 fix: DEV_MODE=1 disables API key enforcement locally
+      - DEV_MODE=1
       - MODEL_PATH=${MODEL_PATH:-/app/models/traffic_sign_model_mobilenetv2.pth}
+      - ENABLE_CLOUDWATCH=0
+      - CPU_LIMIT=2
+    # Override restart: crashes stay stopped so you can read the error
+    restart: "no"
