@@ -1,4 +1,4 @@
-```
+
 ══════════════════════════════════════════════════════════════
   CODE REVIEW REPORT — SRS Requirements Validation
   Reviewed: Full codebase vs docs/srs.md          Date: 2026-05-02
