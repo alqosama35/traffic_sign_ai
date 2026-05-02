@@ -69,14 +69,15 @@ jobs:
       - name: Load image
         run: docker load -i /tmp/inference.tar
 
-      # Issue 1 fix: MODEL_TEST_MODE=1 + DEV_MODE=1 — no .pth, no API key needed
+      # MODEL_TEST_MODE=1: use stub model — no .pth file needed in CI
+      # API_KEY=ci-test-key: keep auth ON so the 401 path is actually tested
       - name: Start container
         run: |
           docker run -d \
             --name inference-api \
             -p 8000:8000 \
             -e MODEL_TEST_MODE=1 \
-            -e DEV_MODE=1 \
+            -e API_KEY=ci-test-key \
             $ECR_REGISTRY/$ECR_REPOSITORY:latest
 
       - name: Wait for API to be healthy
@@ -97,6 +98,8 @@ jobs:
         run: pip install requests pillow
 
       - name: Run test_api.py
+        env:
+          API_KEY: ci-test-key
         run: python test_api.py
 
       - name: Dump container logs on failure
