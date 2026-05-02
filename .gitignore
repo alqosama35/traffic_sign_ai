@@ -1,28 +1,26 @@
-# ── Secrets & local config ────────────────────────────────
+# Secrets
 .env
 *.env
 
-# ── Model weights (large binary files — stored in S3) ─────
+# Model weights (stored in S3)
 *.pth
 *.pt
 *.ckpt
 
-# ── Python ────────────────────────────────────────────────
+# Python
 __pycache__/
 *.py[cod]
-*.pyo
-.Python
 *.egg-info/
-dist/
-build/
+.venv/
+venv/
 
-# ── Jupyter ───────────────────────────────────────────────
+# Jupyter
 .ipynb_checkpoints/
 
-# ── Docker ────────────────────────────────────────────────
+# Docker
 *.tar
 
-# ── OS ────────────────────────────────────────────────────
+# OS
 .DS_Store
 Thumbs.db
 
