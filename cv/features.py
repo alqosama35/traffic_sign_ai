@@ -3,20 +3,44 @@ from sklearn.cluster import KMeans
 
 class BoVW:
     def __init__(self, k=20):
-        self.kmeans = KMeans(n_clusters=k)
+        self.k = k
+        self.kmeans = KMeans(
+            n_clusters=k,
+            random_state=42,
+            n_init=10
+        )
+        self.fitted = False
 
     def fit(self, descriptors_list):
-        all_desc = np.vstack([d for d in descriptors_list if d is not None])
+        valid_desc = [
+            d for d in descriptors_list
+            if d is not None and len(d) > 0
+        ]
+
+        if len(valid_desc) == 0:
+            raise ValueError("No valid descriptors to train BoVW")
+
+        all_desc = np.vstack(valid_desc)
+
         self.kmeans.fit(all_desc)
+        self.fitted = True
 
     def transform(self, desc):
-        if desc is None:
-            return np.zeros(self.kmeans.n_clusters)
+        if not self.fitted:
+            raise RuntimeError("BoVW not fitted yet")
 
-        hist = np.zeros(self.kmeans.n_clusters)
+        if desc is None or len(desc) == 0:
+            return np.zeros(self.k)
+
+        hist = np.zeros(self.k)
+
         preds = self.kmeans.predict(desc)
 
         for p in preds:
             hist[p] += 1
 
-        return hist / (np.linalg.norm(hist) + 1e-6)
+        norm = np.linalg.norm(hist)
+        if norm > 0:
+            hist = hist / norm
+
+        return hist
