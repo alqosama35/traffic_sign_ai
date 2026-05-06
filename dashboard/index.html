@@ -4,21 +4,100 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Traffic Sign AI — Dashboard</title>
-  <style>
-    body { font-family: system-ui, sans-serif; max-width: 600px; margin: 80px auto; color: #333; }
-    h1   { font-size: 1.5rem; }
-    p    { color: #666; }
-  </style>
+  <link rel="stylesheet" href="/dashboard/css/style.css">
+  <!-- Chart.js — used by GA tab -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
 </head>
 <body>
-  <h1>Traffic Sign Intelligence Dashboard</h1>
-  <p>Dashboard implementation in progress — Phase 1 relay endpoints are live.</p>
-  <ul>
-    <li><a href="/dashboard/data/ea">GET /dashboard/data/ea</a></li>
-    <li><a href="/dashboard/data/training-report">GET /dashboard/data/training-report</a></li>
-    <li><a href="/dashboard/data/cv-metrics">GET /dashboard/data/cv-metrics</a></li>
-    <li><a href="/dashboard/data/confusion-matrix.png">GET /dashboard/data/confusion-matrix.png</a></li>
-    <li><a href="/docs#/dashboard/dashboard_predict_dashboard_predict_post">POST /dashboard/predict (Swagger)</a></li>
-  </ul>
+
+  <header class="site-header">
+    <h1>Traffic Sign Intelligence Platform</h1>
+    <p>GTSRB · MobileNetV2 · Genetic Algorithm · Classical CV Baseline</p>
+  </header>
+
+  <nav class="tab-nav">
+    <button class="tab-btn" data-tab="ga">GA Experiments</button>
+    <button class="tab-btn" data-tab="model">Model Evaluation</button>
+    <button class="tab-btn" data-tab="comparison">Comparison</button>
+    <button class="tab-btn" data-tab="predict">Live Prediction</button>
+  </nav>
+
+  <div class="content">
+
+    <!-- ── GA Experiments ───────────────────────────────────────────────────── -->
+    <section id="tab-ga" class="tab-panel">
+      <div class="card">
+        <div class="card-title">GA Convergence — Fitness vs Generation (all 4 configurations)</div>
+        <div class="chart-wrapper">
+          <canvas id="ga-chart"></canvas>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Feature Reduction Summary</div>
+        <div id="ga-table-container">
+          <div class="loading">Loading experiment data…</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Model Evaluation ─────────────────────────────────────────────────── -->
+    <section id="tab-model" class="tab-panel">
+      <div id="model-stats-container">
+        <div class="stat-grid">
+          <div class="stat-card"><div class="stat-value">—</div><div class="stat-label">Overall Accuracy</div></div>
+          <div class="stat-card"><div class="stat-value">—</div><div class="stat-label">Macro F1</div></div>
+          <div class="stat-card"><div class="stat-value">—</div><div class="stat-label">Test Samples</div></div>
+          <div class="stat-card"><div class="stat-value">43</div><div class="stat-label">Classes</div></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">43 × 43 Confusion Matrix — MobileNetV2</div>
+        <img id="confusion-matrix"
+             class="cm-img"
+             src="/dashboard/data/confusion-matrix.png"
+             alt="MobileNetV2 43×43 Confusion Matrix"
+             loading="lazy">
+      </div>
+    </section>
+
+    <!-- ── Model Comparison ─────────────────────────────────────────────────── -->
+    <section id="tab-comparison" class="tab-panel">
+      <div class="card">
+        <div class="card-title">Three-Way Model Comparison</div>
+        <div id="comparison-container">
+          <div class="loading">Loading comparison data…</div>
+        </div>
+        <p class="footnote">
+          † CV Baseline evaluated on a 10-class subset (IDs 0–9, 80 samples/class) using
+          HOG + Color Histogram features — not the full 43-class GTSRB test set.
+          MobileNetV2 and GA-Optimized results use the full 43-class evaluation.
+        </p>
+      </div>
+    </section>
+
+    <!-- ── Live Prediction ──────────────────────────────────────────────────── -->
+    <section id="tab-predict" class="tab-panel">
+      <div class="card">
+        <div class="card-title">Upload a Traffic Sign Image</div>
+        <label class="upload-area" for="file-input">
+          <svg width="40" height="40" fill="none" stroke="#94a3b8" stroke-width="1.5"
+               viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5"/>
+          </svg>
+          <p>Click to select an image (JPG, PNG)</p>
+        </label>
+        <input type="file" id="file-input" accept="image/*">
+      </div>
+      <div id="predict-result"></div>
+    </section>
+
+  </div><!-- /.content -->
+
+  <script type="module" src="/dashboard/js/tabs.js"></script>
+  <script type="module" src="/dashboard/js/ga.js"></script>
+  <script type="module" src="/dashboard/js/model.js"></script>
+  <script type="module" src="/dashboard/js/comparison.js"></script>
+  <script type="module" src="/dashboard/js/predict.js"></script>
 </body>
 </html>
