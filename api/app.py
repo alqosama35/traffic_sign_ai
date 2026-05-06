@@ -278,5 +278,15 @@ async def predict(
         "note":       "Screening tool only — not for use in safety-critical autonomous systems",
     }
 
+# ── Dashboard ──────────────────────────────────────────────────────────────────
+from fastapi.staticfiles import StaticFiles as _StaticFiles
+from api.dashboard_router import router as _dashboard_router
+
+app.include_router(_dashboard_router)
+
+_dashboard_dir = Path(__file__).resolve().parent.parent / "dashboard"
+if _dashboard_dir.exists():
+    app.mount("/dashboard", _StaticFiles(directory=str(_dashboard_dir), html=True), name="dashboard")
+
 # Local:  uvicorn api.app:app --reload --port 8000
 # Docs:   http://localhost:8000/docs
