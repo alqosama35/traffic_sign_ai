@@ -257,7 +257,9 @@ jobs:
                 done
 
                 if [ \$HEALTHY -eq 0 ]; then
-                  echo 'HEALTH CHECK FAILED — rolling back to previous image'
+                  echo 'HEALTH CHECK FAILED — container logs:'
+                  docker logs inference-api 2>&1 || true
+                  echo '--- rolling back to previous image ---'
                   docker stop inference-api 2>/dev/null || true
                   docker rm   inference-api 2>/dev/null || true
                   if [ \"\$PREV_IMAGE\" != 'none' ]; then
