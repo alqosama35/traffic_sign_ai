@@ -33,6 +33,7 @@ RUN pip install --no-cache-dir --retries 5 --timeout 120 \
 
 # Copy app code last — never busts any of the pip cache layers above
 COPY api/ ./api/
+COPY dashboard/ ./dashboard/
 
 RUN chown -R appuser:appuser /app
 USER appuser
