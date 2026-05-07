@@ -231,7 +231,7 @@ jobs:
                 docker run -d \
                   --name inference-api \
                   --restart always \
-                  -p 8000:8000 \
+                  -p 80:8000 \
                   -e MODEL_PATH=\$MODEL_PATH_VAL \
                   -e API_KEY=\$API_KEY_VAL \
                   -e AWS_REGION=\$REGION \
@@ -246,7 +246,7 @@ jobs:
                 HEALTHY=0
                 for i in \$(seq 1 10); do
                   STATUS=\$(curl -sf -o /dev/null -w '%{http_code}' \
-                    http://localhost:8000/health 2>/dev/null || echo '000')
+                    http://localhost/health 2>/dev/null || echo '000')
                   if [ \"\$STATUS\" = '200' ]; then
                     HEALTHY=1
                     echo 'New container is healthy.'
@@ -266,7 +266,7 @@ jobs:
                     docker run -d \
                       --name inference-api \
                       --restart always \
-                      -p 8000:8000 \
+                      -p 80:8000 \
                       -e MODEL_PATH=\$MODEL_PATH_VAL \
                       -e API_KEY=\$API_KEY_VAL \
                       -e AWS_REGION=\$REGION \
