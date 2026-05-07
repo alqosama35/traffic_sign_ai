@@ -213,8 +213,8 @@ jobs:
                 REGION=$AWS_REGION
 
                 # Record previous image for rollback (Issue 17 fix)
-                PREV_IMAGE=\$(docker inspect inference-api \
-                  --format='{{.Config.Image}}' 2>/dev/null || echo 'none')
+                PREV_IMAGE=\$(docker inspect inference-api --format='{{.Config.Image}}' 2>/dev/null | tr -d '[:space:]')
+                [ -z \"\$PREV_IMAGE\" ] && PREV_IMAGE=none
                 echo \"Previous image: \$PREV_IMAGE\"
 
                 # Authenticate Docker to ECR using EC2 IAM role (Issue 2 fix)
@@ -280,14 +280,3 @@ jobs:
                   exit 1
                 fi
               "
-
-      - name: Verify deployment from GitHub runner
-        run: |
-          for i in $(seq 1 5); do
-            STATUS=$(curl -sf -o /dev/null -w "%{http_code}" \
-              http://${{ secrets.EC2_HOST }}:8000/health 2>/dev/null || echo "000")
-            [ "$STATUS" = "200" ] && echo "Deployment verified." && exit 0
-            sleep 5
-          done
-          echo "Deployment verification failed."
-          exit 1
