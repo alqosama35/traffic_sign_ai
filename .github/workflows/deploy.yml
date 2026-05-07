@@ -237,6 +237,8 @@ jobs:
                   -e AWS_REGION=\$REGION \
                   -e ENABLE_CLOUDWATCH=1 \
                   -e CPU_LIMIT=2 \
+                  -e DATA_SOURCE=s3 \
+                  -e S3_BUCKET='${{ secrets.S3_BUCKET }}' \
                   \$FULL_IMAGE
 
                 # Health check with rollback on failure (Issue 17 fix)
@@ -268,6 +270,8 @@ jobs:
                       -e AWS_REGION=\$REGION \
                       -e ENABLE_CLOUDWATCH=1 \
                       -e CPU_LIMIT=2 \
+                      -e DATA_SOURCE=s3 \
+                      -e S3_BUCKET='${{ secrets.S3_BUCKET }}' \
                       \$PREV_IMAGE
                     echo \"Rolled back to \$PREV_IMAGE\"
                   fi
