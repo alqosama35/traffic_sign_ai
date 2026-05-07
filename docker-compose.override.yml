@@ -10,10 +10,15 @@ services:
     volumes:
       # Live mount: changes to api/ are instant — no rebuild needed
       - ./api:/app/api
+      - ./dashboard:/app/dashboard:ro
+      - ./training/outputs/model/mobilenetv2_inference.pth:/app/models/mobilenetv2_inference.pth:ro
+      - ./ea/results:/app/ea/results:ro
+      - ./training/outputs/logs:/app/training/outputs/logs:ro
+      - ./training/outputs/plots:/app/training/outputs/plots:ro
     environment:
-      # Issue 5 fix: DEV_MODE=1 disables API key enforcement locally
-      - DEV_MODE=1
-      - MODEL_PATH=${MODEL_PATH:-/app/models/traffic_sign_model_mobilenetv2.pth}
+      # Empty API_KEY disables auth enforcement in local dev (see app.py:27)
+      - API_KEY=
+      - MODEL_PATH=${MODEL_PATH:-/app/models/mobilenetv2_inference.pth}
       - ENABLE_CLOUDWATCH=0
       - CPU_LIMIT=2
     # Override restart: crashes stay stopped so you can read the error
