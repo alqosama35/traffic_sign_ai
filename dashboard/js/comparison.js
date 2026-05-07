@@ -68,9 +68,9 @@ async function init() {
           <tr>
             <th>Model</th>
             <th>Type</th>
-            <th>Accuracy</th>
-            <th>Macro F1</th>
-            <th>Evaluated On</th>
+            <th class="num">Accuracy</th>
+            <th class="num">Macro F1</th>
+            <th class="num">Evaluated On</th>
             <th>Notes</th>
           </tr>
         </thead>

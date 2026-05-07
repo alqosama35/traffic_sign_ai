@@ -142,7 +142,8 @@ body {
 }
 .data-table tr:last-child td { border-bottom: none; }
 .data-table tr:hover td      { background: #f8fafc; }
-.data-table td.num {
+.data-table td.num,
+.data-table th.num {
   font-variant-numeric: tabular-nums;
   text-align: right;
 }

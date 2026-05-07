@@ -98,11 +98,11 @@ function buildTable(runs) {
         <thead>
           <tr>
             <th>Configuration</th>
-            <th>Full Val Acc</th>
-            <th>GA Val Acc</th>
-            <th>Features Used</th>
-            <th>Reduction</th>
-            <th>Acc Drop</th>
+            <th class="num">Full Val Acc</th>
+            <th class="num">GA Val Acc</th>
+            <th class="num">Features Used</th>
+            <th class="num">Reduction</th>
+            <th class="num">Acc Drop</th>
           </tr>
         </thead>
         <tbody>${rows}</tbody>
