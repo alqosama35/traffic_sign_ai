@@ -9,6 +9,8 @@ venv/
 data/
 dataset/
 training/outputs/
+!training/outputs/logs/report.json
+!training/outputs/plots/cm.png
 EDA/
 *.pth
 *.pkl

@@ -4,9 +4,10 @@ RUN adduser --disabled-password --gecos "" appuser
 
 WORKDIR /app
 
-RUN pip install --no-cache-dir fastapi==0.111.0 "uvicorn[standard]==0.29.0"
+RUN pip install --no-cache-dir fastapi==0.111.0 "uvicorn[standard]==0.29.0" boto3==1.34.0
 
 COPY services/ga/ ./services/ga/
+COPY ea/results/ ./ea/results/
 
 RUN chown -R appuser:appuser /app
 USER appuser

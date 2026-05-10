@@ -9,10 +9,12 @@ WORKDIR /app
 
 RUN pip install --no-cache-dir \
     fastapi==0.111.0 "uvicorn[standard]==0.29.0" \
-    httpx==0.27.0 python-multipart==0.0.9 pillow==10.3.0
+    httpx==0.27.0 python-multipart==0.0.9 pillow==10.3.0 boto3==1.34.0
 
 COPY services/dashboard/ ./services/dashboard/
 COPY dashboard/ ./dashboard/
+COPY training/outputs/logs/report.json ./training/outputs/logs/report.json
+COPY training/outputs/plots/cm.png     ./training/outputs/plots/cm.png
 
 RUN chown -R appuser:appuser /app
 USER appuser

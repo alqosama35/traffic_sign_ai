@@ -2,6 +2,7 @@ import json
 import os
 from pathlib import Path
 
+import boto3
 import httpx
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
@@ -15,11 +16,34 @@ CV_URL           = os.environ.get("CV_URL",        "http://cv-svc:8002")
 GA_URL           = os.environ.get("GA_URL",        "http://ga-svc:8003")
 INTERNAL_API_KEY = os.environ.get("INTERNAL_API_KEY", "")
 
-# ── Local file paths (mounted from host / S3 download) ────────────────────────
+# ── Local file paths (baked into image; optionally refreshed from S3) ─────────
 _REPORT_PATH    = Path(os.environ.get("REPORT_PATH",    "/app/training/outputs/logs/report.json"))
 _CM_PATH        = Path(os.environ.get("CM_PATH",        "/app/training/outputs/plots/cm.png"))
 _AUDIT_LOG_FILE = Path(os.environ.get("AUDIT_LOG_FILE", "/app/logs/predictions.jsonl"))
 _STATIC_DIR     = Path(os.environ.get("STATIC_DIR",     "/app/dashboard"))
+
+_DATA_SOURCE = os.environ.get("DATA_SOURCE", "local")
+_S3_BUCKET   = os.environ.get("S3_BUCKET", "")
+_AWS_REGION  = os.environ.get("AWS_REGION", "us-east-1")
+
+
+def _s3_download(s3_key: str, local_path: Path) -> None:
+    """Download one file from S3; silently fall back to the baked-in local copy."""
+    try:
+        local_path.parent.mkdir(parents=True, exist_ok=True)
+        boto3.client("s3", region_name=_AWS_REGION).download_file(
+            _S3_BUCKET, s3_key, str(local_path))
+        print(f"[dashboard] s3://{_S3_BUCKET}/{s3_key} → {local_path}", flush=True)
+    except Exception as exc:
+        print(f"[dashboard] S3 fallback for {s3_key}: {exc}", flush=True)
+
+
+@app.on_event("startup")
+async def _startup():
+    if _DATA_SOURCE != "s3" or not _S3_BUCKET:
+        return
+    _s3_download("training/outputs/logs/report.json", _REPORT_PATH)
+    _s3_download("training/outputs/plots/cm.png", _CM_PATH)
 
 
 # ── Health — fan-out to all upstream services ──────────────────────────────────

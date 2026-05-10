@@ -85,6 +85,9 @@ services:
     expose: ["8002"]
     environment:
       - CV_METRICS_PATH=/app/dashboard/data/cv_metrics.json
+      - DATA_SOURCE=${DATA_SOURCE:-local}
+      - S3_BUCKET=${S3_BUCKET}
+      - AWS_REGION=${AWS_REGION:-us-east-1}
     networks: [internal]
     restart: always
     deploy:
@@ -100,6 +103,9 @@ services:
     expose: ["8003"]
     environment:
       - EA_RESULTS_DIR=/app/ea/results
+      - DATA_SOURCE=${DATA_SOURCE:-local}
+      - S3_BUCKET=${S3_BUCKET}
+      - AWS_REGION=${AWS_REGION:-us-east-1}
     networks: [internal]
     restart: always
     deploy:
@@ -142,6 +148,9 @@ services:
       - CM_PATH=/app/training/outputs/plots/cm.png
       - STATIC_DIR=/app/dashboard
       - AUDIT_LOG_FILE=/app/logs/predictions.jsonl
+      - DATA_SOURCE=${DATA_SOURCE:-local}
+      - S3_BUCKET=${S3_BUCKET}
+      - AWS_REGION=${AWS_REGION:-us-east-1}
     volumes:
       - prediction-logs:/app/logs:ro
     networks: [internal]
