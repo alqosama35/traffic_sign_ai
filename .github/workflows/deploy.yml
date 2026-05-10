@@ -338,10 +338,10 @@ jobs:
                 cd /home/${{ secrets.EC2_USER }}
 
                 # Stop old stack
-                docker-compose down --remove-orphans || true
+                docker compose down --remove-orphans || true
 
                 # Start new stack (images already pulled and tagged — no build on EC2)
-                docker-compose up -d --no-build
+                docker compose up -d --no-build
 
                 # Health check on gateway (port 80)
                 echo 'Waiting for gateway health check ...'
@@ -360,9 +360,9 @@ jobs:
 
                 if [ \$HEALTHY -eq 0 ]; then
                   echo 'HEALTH CHECK FAILED — service logs:'
-                  docker-compose logs --tail=50
+                  docker compose logs --tail=50
                   echo '--- rolling back: stopping stack ---'
-                  docker-compose down --remove-orphans || true
+                  docker compose down --remove-orphans || true
                   exit 1
                 fi
               "
