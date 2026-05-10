@@ -1,7 +1,5 @@
 # ============================================================
-# FR-CI-03: CI/CD Pipeline — Build · Test · Push · Deploy
-# FR-CI-04: Every stage depends on the previous (needs:)
-# FR-CI-05: Image tagged <ecr-repo>:<short-git-sha>
+# CI/CD Pipeline — Build · Test · Push · Deploy (microservices)
 # ============================================================
 
 name: Build · Test · Push · Deploy
@@ -11,108 +9,67 @@ on:
     branches: [main]
 
 env:
-  AWS_REGION: eu-north-1
-  ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.eu-north-1.amazonaws.com
-  ECR_REPOSITORY: traffic-sign-api
+  AWS_REGION:    eu-north-1
+  ECR_REGISTRY:  ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.eu-north-1.amazonaws.com
 
 jobs:
   # ════════════════════════════════════════════════════════
-  # STAGE 1 — BUILD
+  # STAGE 1 — BUILD (all 6 service images in parallel)
   # ════════════════════════════════════════════════════════
   build:
-    name: "Stage 1 · Build"
+    name: "Stage 1 · Build (${{ matrix.service }})"
     runs-on: ubuntu-latest
-    timeout-minutes: 20 # Issue 15 fix: never hang the runner for 6h
+    timeout-minutes: 20
+
+    strategy:
+      matrix:
+        include:
+          - service: gateway
+            dockerfile: services/gateway/Dockerfile
+          - service: inference
+            dockerfile: services/inference/Dockerfile
+          - service: cv
+            dockerfile: services/cv/Dockerfile
+          - service: ga
+            dockerfile: services/ga/Dockerfile
+          - service: audit
+            dockerfile: services/audit/Dockerfile
+          - service: dashboard
+            dockerfile: services/dashboard/Dockerfile
 
     steps:
       - uses: actions/checkout@v4
 
-      # Issue 11 fix: use short SHA (7 chars) not full 40-char SHA
       - name: Compute short SHA
         run: echo "IMAGE_TAG=${GITHUB_SHA:0:7}" >> $GITHUB_ENV
 
-      - name: Build Docker image
+      - name: Build image
         run: |
           docker build \
-            -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
-            -t $ECR_REGISTRY/$ECR_REPOSITORY:latest \
+            -f ${{ matrix.dockerfile }} \
+            -t $ECR_REGISTRY/traffic-sign-${{ matrix.service }}:$IMAGE_TAG \
+            -t $ECR_REGISTRY/traffic-sign-${{ matrix.service }}:latest \
             .
 
-      - name: Save image tar for downstream jobs
-        run: docker save $ECR_REGISTRY/$ECR_REPOSITORY:latest -o /tmp/inference.tar
+      - name: Save image tar
+        run: docker save $ECR_REGISTRY/traffic-sign-${{ matrix.service }}:latest -o /tmp/${{ matrix.service }}.tar
 
       - uses: actions/upload-artifact@v4
         with:
-          name: inference-image
-          path: /tmp/inference.tar
+          name: ${{ matrix.service }}-image
+          path: /tmp/${{ matrix.service }}.tar
           retention-days: 1
 
   # ════════════════════════════════════════════════════════
   # STAGE 2 — TEST
-  # Issue 1 fix: MODEL_TEST_MODE=1 starts the container with
-  # random weights so no .pth file is needed in CI.
+  # Step A: unit test inference-svc alone (MODEL_TEST_MODE=1,
+  #         RABBITMQ_URL="" so broker publish is disabled)
+  # Step B: full-stack smoke test via docker compose
   # ════════════════════════════════════════════════════════
   test:
     name: "Stage 2 · Test"
     runs-on: ubuntu-latest
     needs: build
-    timeout-minutes: 10
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: inference-image
-          path: /tmp
-
-      - name: Load image
-        run: docker load -i /tmp/inference.tar
-
-      # MODEL_TEST_MODE=1: use stub model — no .pth file needed in CI
-      # API_KEY=ci-test-key: keep auth ON so the 401 path is actually tested
-      - name: Start container
-        run: |
-          docker run -d \
-            --name inference-api \
-            -p 8000:8000 \
-            -e MODEL_TEST_MODE=1 \
-            -e API_KEY=ci-test-key \
-            $ECR_REGISTRY/$ECR_REPOSITORY:latest
-
-      - name: Wait for API to be healthy
-        run: |
-          echo "Waiting for /health ..."
-          for i in $(seq 1 20); do
-            STATUS=$(curl -sf -o /dev/null -w "%{http_code}" \
-              http://localhost:8000/health 2>/dev/null || echo "000")
-            [ "$STATUS" = "200" ] && echo "Healthy." && exit 0
-            echo "Attempt $i — HTTP $STATUS, retrying in 3s ..."
-            sleep 3
-          done
-          echo "Container never became healthy."
-          docker logs inference-api
-          exit 1
-
-      - name: Install test deps
-        run: pip install requests pillow
-
-      - name: Run test_api.py
-        env:
-          API_KEY: ci-test-key
-        run: python test_api.py
-
-      - name: Dump container logs on failure
-        if: failure()
-        run: docker logs inference-api
-
-  # ════════════════════════════════════════════════════════
-  # STAGE 3 — PUSH TO ECR
-  # ════════════════════════════════════════════════════════
-  push-to-ecr:
-    name: "Stage 3 · Push to ECR"
-    runs-on: ubuntu-latest
-    needs: test
     timeout-minutes: 15
 
     steps:
@@ -121,23 +78,177 @@ jobs:
       - name: Compute short SHA
         run: echo "IMAGE_TAG=${GITHUB_SHA:0:7}" >> $GITHUB_ENV
 
+      # ── Step A: inference-svc unit test (test_api.py) ────────────────────
       - uses: actions/download-artifact@v4
         with:
           name: inference-image
           path: /tmp
 
-      - name: Load image
+      - name: Load inference image
         run: docker load -i /tmp/inference.tar
 
-      # Re-tag with the correct short SHA (the saved tar has :latest)
+      - name: Start inference-svc (stub model, no broker)
+        run: |
+          docker run -d \
+            --name inference-svc \
+            -p 8000:8001 \
+            -e MODEL_TEST_MODE=1 \
+            -e API_KEY=ci-test-key \
+            -e RABBITMQ_URL="" \
+            $ECR_REGISTRY/traffic-sign-inference:latest
+
+      - name: Wait for inference-svc to be healthy
+        run: |
+          for i in $(seq 1 20); do
+            STATUS=$(curl -sf -o /dev/null -w "%{http_code}" http://localhost:8000/health 2>/dev/null || echo "000")
+            [ "$STATUS" = "200" ] && echo "Healthy." && exit 0
+            echo "Attempt $i — HTTP $STATUS, retrying in 3s ..."
+            sleep 3
+          done
+          echo "inference-svc never became healthy."
+          docker logs inference-svc
+          exit 1
+
+      - name: Install test deps
+        run: pip install requests pillow
+
+      - name: Run test_api.py against inference-svc
+        env:
+          API_KEY: ci-test-key
+        run: python test_api.py
+
+      - name: Dump inference logs on failure
+        if: failure()
+        run: docker logs inference-svc
+
+      - name: Stop inference-svc
+        run: docker stop inference-svc && docker rm inference-svc
+
+      # ── Step B: full-stack smoke test via docker compose ─────────────────
+      - uses: actions/download-artifact@v4
+        with:
+          name: cv-image
+          path: /tmp
+      - uses: actions/download-artifact@v4
+        with:
+          name: ga-image
+          path: /tmp
+      - uses: actions/download-artifact@v4
+        with:
+          name: audit-image
+          path: /tmp
+      - uses: actions/download-artifact@v4
+        with:
+          name: dashboard-image
+          path: /tmp
+      - uses: actions/download-artifact@v4
+        with:
+          name: gateway-image
+          path: /tmp
+
+      - name: Load all images
+        run: |
+          for svc in inference cv ga audit dashboard gateway; do
+            docker load -i /tmp/$svc.tar
+          done
+
+      - name: Retag images for docker compose
+        run: |
+          for svc in inference cv ga audit dashboard gateway; do
+            docker tag $ECR_REGISTRY/traffic-sign-$svc:latest traffic-sign-$svc:deploy
+          done
+
+      - name: Start full stack (smoke test)
+        env:
+          MODEL_TEST_MODE: "1"
+          API_KEY: ""
+          INTERNAL_API_KEY: ""
+          RABBITMQ_USER: guest
+          RABBITMQ_PASS: guest
+        run: docker compose -f docker-compose.yml up --no-build -d
+
+      - name: Wait for RabbitMQ to be healthy
+        run: |
+          for i in $(seq 1 20); do
+            STATUS=$(docker inspect --format='{{.State.Health.Status}}' $(docker compose ps -q rabbitmq) 2>/dev/null || echo "unknown")
+            [ "$STATUS" = "healthy" ] && echo "RabbitMQ healthy." && exit 0
+            echo "Attempt $i — RabbitMQ status: $STATUS, retrying in 5s ..."
+            sleep 5
+          done
+          echo "RabbitMQ never became healthy."
+          docker compose logs rabbitmq
+          exit 1
+
+      - name: Smoke test gateway health
+        run: |
+          for i in $(seq 1 15); do
+            STATUS=$(curl -sf -o /dev/null -w "%{http_code}" http://localhost/health 2>/dev/null || echo "000")
+            [ "$STATUS" = "200" ] && echo "Gateway healthy." && exit 0
+            echo "Attempt $i — HTTP $STATUS, retrying in 3s ..."
+            sleep 3
+          done
+          echo "Gateway never became healthy."
+          docker compose logs
+          exit 1
+
+      - name: Smoke test predict through gateway
+        run: |
+          python - << 'EOF'
+          import io, requests
+          from PIL import Image, ImageDraw
+          img = Image.new("RGB", (224, 224), color=(220, 50, 50))
+          buf = io.BytesIO()
+          img.save(buf, format="JPEG")
+          buf.seek(0)
+          r = requests.post("http://localhost/predict", files={"file": ("test.jpg", buf, "image/jpeg")})
+          assert r.status_code == 200, f"Expected 200, got {r.status_code}: {r.text}"
+          d = r.json()
+          assert "class" in d and "confidence" in d, f"Bad response: {d}"
+          print(f"Smoke test passed: {d['class']} ({d['confidence']:.1%})")
+          EOF
+
+      - name: Dump compose logs on failure
+        if: failure()
+        run: docker compose logs
+
+      - name: Tear down stack
+        if: always()
+        run: docker compose -f docker-compose.yml down
+
+  # ════════════════════════════════════════════════════════
+  # STAGE 3 — PUSH TO ECR (all 6 service images)
+  # ════════════════════════════════════════════════════════
+  push-to-ecr:
+    name: "Stage 3 · Push (${{ matrix.service }})"
+    runs-on: ubuntu-latest
+    needs: test
+    timeout-minutes: 15
+
+    strategy:
+      matrix:
+        service: [gateway, inference, cv, ga, audit, dashboard]
+
+    steps:
+      - name: Compute short SHA
+        run: echo "IMAGE_TAG=${GITHUB_SHA:0:7}" >> $GITHUB_ENV
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ matrix.service }}-image
+          path: /tmp
+
+      - name: Load image
+        run: docker load -i /tmp/${{ matrix.service }}.tar
+
       - name: Re-tag with short SHA
         run: |
-          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:latest \
-                     $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker tag \
+            $ECR_REGISTRY/traffic-sign-${{ matrix.service }}:latest \
+            $ECR_REGISTRY/traffic-sign-${{ matrix.service }}:$IMAGE_TAG
 
       - name: Authenticate to ECR
         env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_ACCESS_KEY_ID:     ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         run: |
           aws ecr get-login-password --region $AWS_REGION | \
@@ -145,18 +256,17 @@ jobs:
 
       - name: Push image
         run: |
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          docker push $ECR_REGISTRY/traffic-sign-${{ matrix.service }}:$IMAGE_TAG
+          docker push $ECR_REGISTRY/traffic-sign-${{ matrix.service }}:latest
 
-      # Issue 16 fix: keep only last 10 images in ECR to control storage cost
-      - name: Apply ECR lifecycle policy
+      - name: Apply ECR lifecycle policy (keep last 10 images)
         env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_ACCESS_KEY_ID:     ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         run: |
           aws ecr put-lifecycle-policy \
             --region $AWS_REGION \
-            --repository-name $ECR_REPOSITORY \
+            --repository-name traffic-sign-${{ matrix.service }} \
             --lifecycle-policy-text '{
               "rules":[{
                 "rulePriority":1,
@@ -168,15 +278,9 @@ jobs:
 
   # ════════════════════════════════════════════════════════
   # STAGE 4 — DEPLOY TO EC2
-  # Issue 2 fix: NO AWS credentials passed over SSH.
-  #   The EC2 instance must have an IAM instance profile with:
-  #   - ecr:GetAuthorizationToken
-  #   - ecr:BatchGetImage + ecr:GetDownloadUrlForLayer
-  #   - s3:GetObject on models/ prefix
-  #   The AWS CLI on EC2 reads credentials from the metadata service.
-  # Issue 3 fix: StrictHostKeyChecking=no removed.
-  #   ssh-keyscan already populates known_hosts — that's enough.
-  # Issue 17 fix: rollback to previous image if health check fails.
+  # Uses docker compose on EC2 with all 6 services.
+  # EC2 IAM role provides AWS credentials — no secrets over SSH.
+  # Rollback: re-deploy previous compose stack on health failure.
   # ════════════════════════════════════════════════════════
   deploy:
     name: "Stage 4 · Deploy to EC2"
@@ -185,6 +289,8 @@ jobs:
     timeout-minutes: 10
 
     steps:
+      - uses: actions/checkout@v4
+
       - name: Compute short SHA
         run: echo "IMAGE_TAG=${GITHUB_SHA:0:7}" >> $GITHUB_ENV
 
@@ -195,88 +301,85 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
 
-      # Issue 2+3 fix: no AWS creds in env, no StrictHostKeyChecking=no
-      # EC2 IAM role provides AWS credentials inside the instance automatically
+      - name: Copy docker-compose.yml to EC2
+        run: |
+          scp -i ~/.ssh/deploy_key \
+            docker-compose.yml \
+            ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/home/${{ secrets.EC2_USER }}/docker-compose.yml
+
       - name: Deploy on EC2
+        env:
+          REGISTRY:         ${{ env.ECR_REGISTRY }}
+          TAG:              ${{ env.IMAGE_TAG }}
+          MODEL_PATH:       ${{ secrets.MODEL_PATH }}
+          API_KEY:          ${{ secrets.API_KEY }}
+          INTERNAL_API_KEY: ${{ secrets.INTERNAL_API_KEY }}
+          RABBITMQ_PASS:    ${{ secrets.RABBITMQ_PASS }}
+          S3_BUCKET:        ${{ secrets.S3_BUCKET }}
         run: |
           ssh -i ~/.ssh/deploy_key \
               ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} \
               "
                 set -e
 
-                REGISTRY=$ECR_REGISTRY
-                REPO=$ECR_REPOSITORY
-                TAG=$IMAGE_TAG
-                FULL_IMAGE=\$REGISTRY/\$REPO:\$TAG
-                MODEL_PATH_VAL='${{ secrets.MODEL_PATH }}'
-                API_KEY_VAL='${{ secrets.API_KEY }}'
-                REGION=$AWS_REGION
+                REGISTRY=$REGISTRY
+                TAG=$TAG
+                SERVICES='gateway inference cv ga audit dashboard'
 
-                # Record previous image for rollback (Issue 17 fix)
-                PREV_IMAGE=\$(docker inspect inference-api --format='{{.Config.Image}}' 2>/dev/null | tr -d '[:space:]')
-                [ -z \"\$PREV_IMAGE\" ] && PREV_IMAGE=none
-                echo \"Previous image: \$PREV_IMAGE\"
-
-                # Authenticate Docker to ECR using EC2 IAM role (Issue 2 fix)
-                aws ecr get-login-password --region \$REGION | \
+                # Authenticate to ECR using EC2 IAM role
+                aws ecr get-login-password --region $AWS_REGION | \
                   docker login --username AWS --password-stdin \$REGISTRY
 
-                docker pull \$FULL_IMAGE
+                # Pull all service images and retag for docker compose
+                for svc in \$SERVICES; do
+                  echo \"Pulling traffic-sign-\$svc:\$TAG ...\"
+                  docker pull \$REGISTRY/traffic-sign-\$svc:\$TAG
+                  docker tag  \$REGISTRY/traffic-sign-\$svc:\$TAG \
+                              \$REGISTRY/traffic-sign-\$svc:latest
+                  docker tag  \$REGISTRY/traffic-sign-\$svc:\$TAG \
+                              traffic-sign-\$svc:deploy
+                done
 
-                # Stop old container
-                docker stop inference-api 2>/dev/null || true
-                docker rm   inference-api 2>/dev/null || true
+                # Write .env for docker compose
+                cat > /home/${{ secrets.EC2_USER }}/.env << 'ENVEOF'
+MODEL_PATH=$MODEL_PATH
+API_KEY=$API_KEY
+INTERNAL_API_KEY=$INTERNAL_API_KEY
+RABBITMQ_USER=traffic
+RABBITMQ_PASS=$RABBITMQ_PASS
+AWS_REGION=$AWS_REGION
+ENABLE_CLOUDWATCH=1
+S3_BUCKET=$S3_BUCKET
+ENVEOF
 
-                # Start new container
-                docker run -d \
-                  --name inference-api \
-                  --restart always \
-                  -p 80:8000 \
-                  -e MODEL_PATH=\$MODEL_PATH_VAL \
-                  -e API_KEY=\$API_KEY_VAL \
-                  -e AWS_REGION=\$REGION \
-                  -e ENABLE_CLOUDWATCH=1 \
-                  -e CPU_LIMIT=2 \
-                  -e DATA_SOURCE=s3 \
-                  -e S3_BUCKET='${{ secrets.S3_BUCKET }}' \
-                  \$FULL_IMAGE
+                cd /home/${{ secrets.EC2_USER }}
 
-                # Health check with rollback on failure (Issue 17 fix)
-                echo 'Waiting for new container ...'
+                # Stop old stack
+                docker compose down --remove-orphans || true
+
+                # Start new stack (images already pulled and tagged — no build on EC2)
+                docker compose up -d --no-build
+
+                # Health check on gateway (port 80)
+                echo 'Waiting for gateway health check ...'
                 HEALTHY=0
-                for i in \$(seq 1 10); do
+                for i in \$(seq 1 20); do
                   STATUS=\$(curl -sf -o /dev/null -w '%{http_code}' \
                     http://localhost/health 2>/dev/null || echo '000')
                   if [ \"\$STATUS\" = '200' ]; then
                     HEALTHY=1
-                    echo 'New container is healthy.'
+                    echo 'Deployment healthy.'
                     break
                   fi
                   echo \"Attempt \$i — HTTP \$STATUS, retrying ...\"
-                  sleep 3
+                  sleep 5
                 done
 
                 if [ \$HEALTHY -eq 0 ]; then
-                  echo 'HEALTH CHECK FAILED — container logs:'
-                  docker logs inference-api 2>&1 || true
-                  echo '--- rolling back to previous image ---'
-                  docker stop inference-api 2>/dev/null || true
-                  docker rm   inference-api 2>/dev/null || true
-                  if [ \"\$PREV_IMAGE\" != 'none' ]; then
-                    docker run -d \
-                      --name inference-api \
-                      --restart always \
-                      -p 80:8000 \
-                      -e MODEL_PATH=\$MODEL_PATH_VAL \
-                      -e API_KEY=\$API_KEY_VAL \
-                      -e AWS_REGION=\$REGION \
-                      -e ENABLE_CLOUDWATCH=1 \
-                      -e CPU_LIMIT=2 \
-                      -e DATA_SOURCE=s3 \
-                      -e S3_BUCKET='${{ secrets.S3_BUCKET }}' \
-                      \$PREV_IMAGE
-                    echo \"Rolled back to \$PREV_IMAGE\"
-                  fi
+                  echo 'HEALTH CHECK FAILED — service logs:'
+                  docker compose logs --tail=50
+                  echo '--- rolling back: stopping stack ---'
+                  docker compose down --remove-orphans || true
                   exit 1
                 fi
               "

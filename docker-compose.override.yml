@@ -1,25 +1,55 @@
-# ============================================================
 # LOCAL DEVELOPMENT ONLY — auto-merged by Docker Compose
 # Never used in CI (CI passes -f docker-compose.yml explicitly)
-# ============================================================
 
 services:
-  api:
-    # Override CMD: add --reload so uvicorn restarts on file save
-    command: uvicorn api.app:app --host 0.0.0.0 --port 8000 --reload
+
+  gateway:
+    ports:
+      - "8080:80"    # avoid requiring root locally; access via http://localhost:8080
+
+  rabbitmq:
+    ports:
+      - "15672:15672"  # management UI: http://localhost:15672 (guest/guest)
+      - "5672:5672"    # expose AMQP locally for debugging with tools like RabbitMQ CLI
+
+  inference-svc:
+    command: uvicorn services.inference.main:app --host 0.0.0.0 --port 8001 --reload
     volumes:
-      # Live mount: changes to api/ are instant — no rebuild needed
-      - ./api:/app/api
-      - ./dashboard:/app/dashboard:ro
+      - ./services/inference:/app/services/inference
       - ./training/outputs/model/mobilenetv2_inference.pth:/app/models/mobilenetv2_inference.pth:ro
+    environment:
+      - MODEL_PATH=/app/models/mobilenetv2_inference.pth
+      - API_KEY=
+      - INTERNAL_API_KEY=
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
+    restart: "no"
+
+  cv-svc:
+    command: uvicorn services.cv.main:app --host 0.0.0.0 --port 8002 --reload
+    volumes:
+      - ./services/cv:/app/services/cv
+      - ./dashboard/data:/app/dashboard/data:ro
+    restart: "no"
+
+  ga-svc:
+    command: uvicorn services.ga.main:app --host 0.0.0.0 --port 8003 --reload
+    volumes:
+      - ./services/ga:/app/services/ga
       - ./ea/results:/app/ea/results:ro
+    restart: "no"
+
+  audit-worker:
+    volumes:
+      - ./services/audit:/app/services/audit    # hot-swap worker code without rebuild
+    restart: "no"
+
+  dashboard-svc:
+    command: uvicorn services.dashboard.main:app --host 0.0.0.0 --port 8004 --reload
+    volumes:
+      - ./services/dashboard:/app/services/dashboard
+      - ./dashboard:/app/dashboard:ro
       - ./training/outputs/logs:/app/training/outputs/logs:ro
       - ./training/outputs/plots:/app/training/outputs/plots:ro
     environment:
-      # Empty API_KEY disables auth enforcement in local dev (see app.py:27)
-      - API_KEY=
-      - MODEL_PATH=${MODEL_PATH:-/app/models/mobilenetv2_inference.pth}
-      - ENABLE_CLOUDWATCH=0
-      - CPU_LIMIT=2
-    # Override restart: crashes stay stopped so you can read the error
+      - INTERNAL_API_KEY=
     restart: "no"
