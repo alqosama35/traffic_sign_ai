@@ -3,8 +3,6 @@
 #   CI / production:  docker compose -f docker-compose.yml up --no-build -d  (images pre-tagged as :deploy)
 #   Local dev:        docker compose up --build  (auto-merges override)
 
-version: "3.8"
-
 networks:
   internal:
     driver: bridge

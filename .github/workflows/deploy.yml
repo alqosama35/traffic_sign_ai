@@ -337,6 +337,9 @@ jobs:
 
                 cd /home/${{ secrets.EC2_USER }}
 
+                # Stop any container occupying port 80 (e.g. old monolith)
+                docker ps -q --filter publish=80 | xargs -r docker stop || true
+
                 # Stop old stack
                 docker compose down --remove-orphans || true
 
