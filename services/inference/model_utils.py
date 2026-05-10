@@ -57,10 +57,10 @@ SIGN_DISPLAY_BY_ID = {
 }
 
 CATEGORY_BY_ID = {
-    **{i:"prohibition" for i in [0,1,2,3,4,5,7,8,9,10,15,16,17]},
-    **{i:"danger"      for i in [18,19,20,21,22,23,24,25,26,27,28,29,30,31]},
-    **{i:"mandatory"   for i in [33,34,35,36,37,38,39,40]},
-    **{i:"other"       for i in [6,11,12,13,14,32,41,42]},
+    **{i:"prohibition" for i in [0,1,2,3,4,5,7,8,9,10,14,15,16,17]},       # speed limits + no-X + stop
+    **{i:"danger"      for i in [11,13,18,19,20,21,22,23,24,25,26,27,28,29,30,31]},  # triangular warning signs + yield
+    **{i:"mandatory"   for i in [33,34,35,36,37,38,39,40]},                  # blue circle direction signs
+    **{i:"other"       for i in [6,12,32,41,42]},                             # end-restriction + priority road
 }
 
 
