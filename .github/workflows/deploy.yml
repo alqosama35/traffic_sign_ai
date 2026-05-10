@@ -254,18 +254,6 @@ jobs:
           aws ecr get-login-password --region $AWS_REGION | \
             docker login --username AWS --password-stdin $ECR_REGISTRY
 
-      - name: Ensure ECR repository exists
-        env:
-          AWS_ACCESS_KEY_ID:     ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        run: |
-          aws ecr describe-repositories \
-            --region $AWS_REGION \
-            --repository-names traffic-sign-${{ matrix.service }} \
-          || aws ecr create-repository \
-            --region $AWS_REGION \
-            --repository-name traffic-sign-${{ matrix.service }}
-
       - name: Push image
         run: |
           docker push $ECR_REGISTRY/traffic-sign-${{ matrix.service }}:$IMAGE_TAG
