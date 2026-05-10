@@ -1,0 +1,55 @@
+{
+  "scope": "10 classes (IDs 0–9), 80 samples/class, HOG + Color Histogram features, 80/20 stratified train-test split",
+  "note": "CV pipeline ran on a 10-class subset only — not the full 43-class GTSRB test set. Results are not directly comparable to the MobileNetV2 43-class evaluation.",
+  "overall": {
+    "accuracy":         0.9562,
+    "macro_precision":  0.9574,
+    "macro_recall":     0.9562,
+    "macro_f1":         0.9580,
+    "test_samples":     160,
+    "train_samples":    640
+  },
+  "per_class": [
+    {"class_id": 0, "name": "Speed 20",     "precision": 1.00, "recall": 0.94, "f1": 0.97, "support": 16},
+    {"class_id": 1, "name": "Speed 30",     "precision": 0.94, "recall": 1.00, "f1": 0.97, "support": 16},
+    {"class_id": 2, "name": "Speed 50",     "precision": 1.00, "recall": 1.00, "f1": 1.00, "support": 16},
+    {"class_id": 3, "name": "Speed 60",     "precision": 0.94, "recall": 0.94, "f1": 0.94, "support": 16},
+    {"class_id": 4, "name": "Speed 70",     "precision": 1.00, "recall": 0.94, "f1": 0.97, "support": 16},
+    {"class_id": 5, "name": "Speed 80",     "precision": 0.94, "recall": 0.94, "f1": 0.94, "support": 16},
+    {"class_id": 6, "name": "End Speed 80", "precision": 1.00, "recall": 1.00, "f1": 1.00, "support": 16},
+    {"class_id": 7, "name": "Speed 100",    "precision": 0.88, "recall": 0.94, "f1": 0.91, "support": 16},
+    {"class_id": 8, "name": "Speed 120",    "precision": 0.88, "recall": 0.88, "f1": 0.88, "support": 16},
+    {"class_id": 9, "name": "No Passing",   "precision": 1.00, "recall": 1.00, "f1": 1.00, "support": 16}
+  ],
+  "pipeline": {
+    "preprocessing":  "Gaussian filter (5×5 kernel)",
+    "keypoints":      "Harris Corner Detector",
+    "features":       "HOG (9 orientations, 8×8 cells, 2×2 blocks) + HSV Color Histogram (32 bins/channel)",
+    "segmentation":   "K-Means (K=3)",
+    "classifier":     "Gaussian Naive Bayes",
+    "image_size":     "32×32 px"
+  },
+  "filter_metrics": {
+    "gaussian": {"psnr_db": 24.54, "ssim": 0.8162},
+    "median":   {"psnr_db": 22.21, "ssim": 0.6739},
+    "note": "Higher PSNR = less signal distortion; higher SSIM = more structural similarity. Gaussian selected for pipeline."
+  },
+  "sift_matching": {
+    "good_matches":          1,
+    "total_matches":         17,
+    "matching_accuracy_pct": 5.9,
+    "method":                "BFMatcher L2 + Lowe ratio test (threshold 0.75)"
+  },
+  "kmeans_iou": [
+    {"class_id": 0, "name": "Speed 20", "iou": 0.4395},
+    {"class_id": 1, "name": "Speed 30", "iou": 0.6680},
+    {"class_id": 2, "name": "Speed 50", "iou": 0.4901},
+    {"class_id": 3, "name": "Speed 60", "iou": 0.3812},
+    {"class_id": 4, "name": "Speed 70", "iou": 0.5886}
+  ],
+  "pyramid": {
+    "type":   "Gaussian + Laplacian",
+    "levels": 4,
+    "base_size_px": 128
+  }
+}
