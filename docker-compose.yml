@@ -1,34 +1,151 @@
-# ============================================================
-# FR-CI-02: Docker Compose — production / CI base file
-#
+# Microservices production/CI base file
 # Usage:
-#   CI / production:  docker-compose -f docker-compose.yml up --build
-#   Local dev:        docker-compose up --build
-#                     (auto-merges docker-compose.override.yml)
-# ============================================================
+#   CI / production:  docker compose -f docker-compose.yml up --no-build -d  (images pre-tagged as :deploy)
+#   Local dev:        docker compose up --build  (auto-merges override)
 
-# Issue 14 fix: version: key removed — deprecated in Compose v2
+networks:
+  internal:
+    driver: bridge
+
+volumes:
+  rabbitmq-data:      # RabbitMQ queue persistence — survives restarts
+  prediction-logs:    # Shared between audit-worker (writer) and dashboard-svc (reader)
 
 services:
-  api:
-    build: .
+
+  # ── API Gateway (nginx) ──────────────────────────────────────────────────────
+  gateway:
+    build:
+      context: .
+      dockerfile: services/gateway/Dockerfile
+    image: traffic-sign-gateway:deploy
     ports:
-      - "8000:8000"
-    environment:
-      - MODEL_PATH=${MODEL_PATH:-/app/models/traffic_sign_model_mobilenetv2.pth}
-      - API_KEY=${API_KEY}
-      - AWS_REGION=${AWS_REGION:-us-east-1}
-      - ENABLE_CLOUDWATCH=${ENABLE_CLOUDWATCH:-0}
-      # Issue 18 fix: tell torch how many CPUs the container actually has
-      - CPU_LIMIT=2
-    # NFR-REL-01: restart automatically on crash
+      - "80:80"
+    depends_on:
+      - inference-svc
+      - cv-svc
+      - ga-svc
+      - dashboard-svc
+    networks: [internal]
     restart: always
-    # Issue 21 fix: resource limits so container can't starve the host
+
+  # ── Message Broker (RabbitMQ) ────────────────────────────────────────────────
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    expose: ["5672"]
+    environment:
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER:-guest}
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASS:-guest}
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    networks: [internal]
+    restart: always
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
     deploy:
       resources:
-        limits:
-          cpus: "2"
-          memory: 2G
-        reservations:
-          cpus: "0.5"
-          memory: 512M
+        limits: { cpus: "0.5", memory: 256M }
+
+  # ── Inference Service (MobileNetV2) ──────────────────────────────────────────
+  inference-svc:
+    build:
+      context: .
+      dockerfile: services/inference/Dockerfile
+    image: traffic-sign-inference:deploy
+    expose: ["8001"]
+    environment:
+      - MODEL_PATH=${MODEL_PATH:-/app/models/mobilenetv2_inference.pth}
+      - API_KEY=${API_KEY}
+      - INTERNAL_API_KEY=${INTERNAL_API_KEY}
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+      - ENABLE_CLOUDWATCH=${ENABLE_CLOUDWATCH:-0}
+      - CPU_LIMIT=2
+      - MODEL_TEST_MODE=${MODEL_TEST_MODE:-0}
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASS:-guest}@rabbitmq:5672/
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    networks: [internal]
+    restart: always
+    deploy:
+      resources:
+        limits:       { cpus: "2", memory: 2G }
+        reservations: { cpus: "0.5", memory: 512M }
+
+  # ── CV Baseline Service ──────────────────────────────────────────────────────
+  cv-svc:
+    build:
+      context: .
+      dockerfile: services/cv/Dockerfile
+    image: traffic-sign-cv:deploy
+    expose: ["8002"]
+    environment:
+      - CV_METRICS_PATH=/app/dashboard/data/cv_metrics.json
+    networks: [internal]
+    restart: always
+    deploy:
+      resources:
+        limits: { cpus: "0.25", memory: 128M }
+
+  # ── GA Results Service (read-only) ───────────────────────────────────────────
+  ga-svc:
+    build:
+      context: .
+      dockerfile: services/ga/Dockerfile
+    image: traffic-sign-ga:deploy
+    expose: ["8003"]
+    environment:
+      - EA_RESULTS_DIR=/app/ea/results
+    networks: [internal]
+    restart: always
+    deploy:
+      resources:
+        limits: { cpus: "0.25", memory: 128M }
+
+  # ── Audit Worker (RabbitMQ consumer) ─────────────────────────────────────────
+  audit-worker:
+    build:
+      context: .
+      dockerfile: services/audit/Dockerfile
+    image: traffic-sign-audit:deploy
+    environment:
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASS:-guest}@rabbitmq:5672/
+      - AUDIT_LOG_FILE=/app/logs/predictions.jsonl
+    volumes:
+      - prediction-logs:/app/logs
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    networks: [internal]
+    restart: on-failure
+    deploy:
+      resources:
+        limits: { cpus: "0.1", memory: 64M }
+
+  # ── Dashboard Service (aggregator + static files) ────────────────────────────
+  dashboard-svc:
+    build:
+      context: .
+      dockerfile: services/dashboard/Dockerfile
+    image: traffic-sign-dashboard:deploy
+    expose: ["8004"]
+    environment:
+      - INFERENCE_URL=http://inference-svc:8001
+      - CV_URL=http://cv-svc:8002
+      - GA_URL=http://ga-svc:8003
+      - INTERNAL_API_KEY=${INTERNAL_API_KEY}
+      - REPORT_PATH=/app/training/outputs/logs/report.json
+      - CM_PATH=/app/training/outputs/plots/cm.png
+      - STATIC_DIR=/app/dashboard
+      - AUDIT_LOG_FILE=/app/logs/predictions.jsonl
+    volumes:
+      - prediction-logs:/app/logs:ro
+    networks: [internal]
+    restart: always
+    deploy:
+      resources:
+        limits: { cpus: "0.5", memory: 256M }
