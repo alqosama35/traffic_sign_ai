@@ -259,23 +259,6 @@ jobs:
           docker push $ECR_REGISTRY/traffic-sign-${{ matrix.service }}:$IMAGE_TAG
           docker push $ECR_REGISTRY/traffic-sign-${{ matrix.service }}:latest
 
-      - name: Apply ECR lifecycle policy (keep last 10 images)
-        env:
-          AWS_ACCESS_KEY_ID:     ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        run: |
-          aws ecr put-lifecycle-policy \
-            --region $AWS_REGION \
-            --repository-name traffic-sign-${{ matrix.service }} \
-            --lifecycle-policy-text '{
-              "rules":[{
-                "rulePriority":1,
-                "description":"Keep last 10 images",
-                "selection":{"tagStatus":"any","countType":"imageCountMoreThan","countNumber":10},
-                "action":{"type":"expire"}
-              }]
-            }'
-
   # ════════════════════════════════════════════════════════
   # STAGE 4 — DEPLOY TO EC2
   # Uses docker compose on EC2 with all 6 services.
