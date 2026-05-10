@@ -341,16 +341,16 @@ jobs:
                 done
 
                 # Write .env for docker compose
-                cat > /home/${{ secrets.EC2_USER }}/.env << 'ENVEOF'
-MODEL_PATH=$MODEL_PATH
-API_KEY=$API_KEY
-INTERNAL_API_KEY=$INTERNAL_API_KEY
-RABBITMQ_USER=traffic
-RABBITMQ_PASS=$RABBITMQ_PASS
-AWS_REGION=$AWS_REGION
-ENABLE_CLOUDWATCH=1
-S3_BUCKET=$S3_BUCKET
-ENVEOF
+                {
+                  echo \"MODEL_PATH=$MODEL_PATH\"
+                  echo \"API_KEY=$API_KEY\"
+                  echo \"INTERNAL_API_KEY=$INTERNAL_API_KEY\"
+                  echo \"RABBITMQ_USER=traffic\"
+                  echo \"RABBITMQ_PASS=$RABBITMQ_PASS\"
+                  echo \"AWS_REGION=$AWS_REGION\"
+                  echo \"ENABLE_CLOUDWATCH=1\"
+                  echo \"S3_BUCKET=$S3_BUCKET\"
+                } > /home/${{ secrets.EC2_USER }}/.env
 
                 cd /home/${{ secrets.EC2_USER }}
 
