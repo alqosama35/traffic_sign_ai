@@ -259,10 +259,12 @@ jobs:
           AWS_ACCESS_KEY_ID:     ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         run: |
-          aws ecr create-repository \
+          aws ecr describe-repositories \
             --region $AWS_REGION \
-            --repository-name traffic-sign-${{ matrix.service }} \
-          || true
+            --repository-names traffic-sign-${{ matrix.service }} \
+          || aws ecr create-repository \
+            --region $AWS_REGION \
+            --repository-name traffic-sign-${{ matrix.service }}
 
       - name: Push image
         run: |
